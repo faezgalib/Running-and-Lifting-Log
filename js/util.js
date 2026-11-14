@@ -26,10 +26,20 @@ export const fmtDur = sec => {
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
   return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 };
+// Accepts "45:30", "1:30:00", "45.30", "45 30" and digits only like a stopwatch:
+// "45" = 45 min, "4530" = 45:30, "003000" = 0:30:00, "13000" = 1:30:00.
 export const parseDur = str => {
-  if (!str) return null;
-  const parts = String(str).trim().split(':').map(Number);
-  if (parts.some(isNaN)) return null;
+  if (str == null) return null;
+  const t = String(str).trim();
+  if (!t) return null;
+  let parts;
+  if (/^\d+$/.test(t)) {
+    if (t.length <= 2) return +t * 60;
+    const sec = +t.slice(-2), min = +t.slice(-4, -2), hr = +(t.slice(0, -4) || 0);
+    parts = [hr, min, sec];
+  } else parts = t.split(/[:.,\s]+/).map(Number);
+  if (!parts.length || parts.some(isNaN)) return null;
+  if (parts.length > 1 && parts.slice(1).some(v => v >= 60)) return null;
   return parts.reduce((a, v) => a * 60 + v, 0);
 };
 export const fmtPace = (sec, km) => (km > 0 && sec > 0 ? `${fmtDur(sec / km)}/km` : '–');

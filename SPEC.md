@@ -53,6 +53,7 @@ For unilateral exercises, the weaker side counts.
 
 ## Running
 Manual entry (~30 s): date, type (Easy, Tempo, Interval, Long, Race, Treadmill), distance, duration, avg HR (optional), RPE 1–10, location, sleep, notes. Pace is calculated.
+Duration can be typed on the number pad without ":" — read like a stopwatch: `4530` = 45:30, `003000` = 0:30:00, `13000` = 1:30:00, `45` = 45 min. The field shows the parsed h:mm:ss after leaving it.
 Races: name, date, distance, target time, linked result → countdown on home screen.
 
 ## Mobility and core

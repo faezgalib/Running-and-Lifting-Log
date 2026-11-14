@@ -110,15 +110,12 @@ const go = h => { if (location.hash === h) route(); else location.hash = h; };
 
 function nav(tab) {
   const items = [['', 'Home', 'M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z'], ['history', 'History', 'M12 7v5l3 2M21 12a9 9 0 1 1-9-9 9 9 0 0 1 9 9z'], ['progress', 'Progress', 'M4 19V9m6 10V5m6 14v-7m4 7H2'], ['more', 'More', 'M5 12h.01M12 12h.01M19 12h.01']];
-  return `<nav class="tabbar">${items.map(([h, l, d]) => `<a href="#/${h}" class="${tab === h ? 'on' : ''}"><svg viewBox="0 0 24 24"><path d="${d}"/></svg><span>${l}</span></a>`).join('')}</nav>`;
+  return `<nav class="tabbar">${items.map(([h, l, d]) => `<a href="#/${h}" class="${tab === h ? 'on' : ''}">${h === 'more' && backupDue() ? '<i class="dot" aria-label="Backup due"></i>' : ''}<svg viewBox="0 0 24 24"><path d="${d}"/></svg><span>${l}</span></a>`).join('')}</nav>`;
 }
 
 // ---------- HOME ----------
 routes[''] = function home() {
   const act = activeSession();
-  const lastBackup = S.meta.lastBackup;
-  const days = lastBackup ? daysBetween(lastBackup.slice(0, 10), today()) : null;
-  const backupWarn = days == null ? 'Never backed up.' : days >= 7 ? `Last backup ${days} days ago.` : null;
   const nextRace = S.races.filter(r => r.date >= today()).sort((a, b) => (a.date < b.date ? -1 : 1))[0];
   const wk = weekKey(nowIso());
   const wkSess = doneSessions().filter(s => weekKey(s.start) === wk);
@@ -126,8 +123,11 @@ routes[''] = function home() {
   const wkSets = wkSess.reduce((a, s) => a + s.entries.reduce((b, e) => b + (isLift(exById(e.exId)) ? workingSets(e, exById(e.exId)).length : 0), 0), 0);
   const km = wkRuns.reduce((a, r) => a + (r.distKm || 0), 0);
   return `
-  <header class="top"><h1>Lift Run Journey</h1></header>
-  ${backupWarn ? `<a class="card warn" href="#/more">${backupWarn} Tap to export a backup.</a>` : ''}
+  <header class="hero">
+    <img src="icons/icon-192.png" alt="" width="44" height="44">
+    <div><h1>Lift Run Journey</h1><span class="muted small">${greeting()}</span></div>
+  </header>
+  <div class="card quote"><p>${esc(dailyLine())}</p><span class="muted small">${esc(momentum())}</span></div>
   ${act ? `<a class="card resume" href="#/workout/${act.id}"><b>Session in progress</b><span>${locBadge(act.location)} started ${fmtTime(act.start)} · ${act.entries.length} exercises</span><span class="go">Resume →</span></a>` : ''}
   ${nextRace ? `<div class="card race"><div class="big">${daysBetween(today(), nextRace.date)}</div><div><b>days to ${esc(nextRace.name)}</b><span class="muted">${fmtDate(nextRace.date)} · ${nextRace.distKm} km${nextRace.targetSec ? ` · target ${fmtDur(nextRace.targetSec)}` : ''}</span></div></div>` : ''}
   <div class="actions">
@@ -144,6 +144,35 @@ routes[''] = function home() {
   <section><h2>Recent</h2>${activityList(8)}</section>`;
 };
 routes[''].tab = '';
+
+const LINES = [
+  'Consistency beats intensity.', 'Small steps, every day.', 'Show up. The rest follows.',
+  'Progress, not perfection.', 'Strong body, calm mind.', 'Today counts.', 'Train smart, recover well.',
+  'Every session is a deposit.', 'Slow is smooth, smooth is fast.', 'Your only competition is yesterday.',
+  'Rest is part of the plan.', 'Good form first, weight second.', 'Earn the next kilo.', 'Steady miles build strong legs.',
+];
+function greeting() {
+  const h = new Date().getHours();
+  return h < 11 ? 'Good morning' : h < 15 ? 'Good afternoon' : h < 19 ? 'Good evening' : 'Good night';
+}
+function dailyLine() {
+  const d = new Date();
+  const doy = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
+  return LINES[doy % LINES.length];
+}
+function momentum() {
+  const from = isoDate(new Date(Date.now() - 30 * 864e5));
+  const ses = doneSessions().filter(s => s.start.slice(0, 10) >= from).length;
+  const runs = S.runs.filter(r => r.date.slice(0, 10) >= from);
+  const km = runs.reduce((a, r) => a + (r.distKm || 0), 0);
+  if (!ses && !runs.length) return 'A fresh start. Let\'s go.';
+  return `Last 30 days: ${ses} sessions · ${runs.length} runs · ${+km.toFixed(1)} km`;
+}
+function backupDue() {
+  if (!doneSessions().length && !S.runs.length) return false;
+  const lb = S.meta.lastBackup;
+  return !lb || daysBetween(lb.slice(0, 10), today()) >= 7;
+}
 
 function activityList(limit, filter = 'all') {
   const items = [

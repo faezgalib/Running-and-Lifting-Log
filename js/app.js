@@ -12,7 +12,7 @@ import { lineChart, barChart, legend, LOC_COLORS } from './charts.js';
 const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], meta: {} };
 let draft = null;          // plan being built
 let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
-const APP_VERSION = 'v5';
+const APP_VERSION = 'v6';
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
 const RUN_TYPES = ['Easy', 'Tempo', 'Interval', 'Long', 'Race', 'Treadmill'];
@@ -398,7 +398,7 @@ routes.run = function run(id) {
     ${r.type === 'Race' ? `<label>Race name</label><input data-run="raceName" value="${esc(r.raceName || '')}" placeholder="e.g. Half marathon">` : ''}
     <div class="grid2">
       <div><label>Distance (km)</label><input inputmode="decimal" data-run="distKm" value="${r.distKm ?? ''}"></div>
-      <div><label>Duration (h:mm:ss)</label><input inputmode="numeric" data-run="durSec" value="${r.durSec ? fmtDur(r.durSec) : ''}" placeholder="45:00"></div>
+      <div><label>Duration (h:mm:ss)</label><input inputmode="numeric" data-run="durSec" value="${r.durSec ? fmtDur(r.durSec) : ''}" placeholder="4530 = 45:30"></div>
       <div><label>Avg HR</label><input inputmode="numeric" data-run="avgHr" value="${r.avgHr ?? ''}"></div>
       <div><label>Pace</label><div class="pace" id="pace">${fmtPace(r.durSec, r.distKm)}</div></div>
     </div>
@@ -930,6 +930,12 @@ document.addEventListener('input', ev => {
     target[el.dataset.f] = el.dataset.f === 'w' || el.dataset.f === 'm' || v == null ? v : Math.round(v);
     saveSoon('sessions', s);
   }
+});
+
+// Show the parsed duration as h:mm:ss once the field is left, so a typo is visible right away.
+document.addEventListener('focusout', ev => {
+  const el = ev.target;
+  if (el.dataset && el.dataset.run === 'durSec' && ui.runEdit) el.value = ui.runEdit.durSec ? fmtDur(ui.runEdit.durSec) : el.value;
 });
 
 window.addEventListener('hashchange', route);

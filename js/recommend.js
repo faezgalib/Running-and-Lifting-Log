@@ -31,7 +31,8 @@ export function historyFor(exId, sessions, beforeIso) {
     .sort((a, b) => (a.s.start < b.s.start ? 1 : -1));
 }
 
-const penaltyRule = c => (c && c.sleep != null && c.sleep <= 5 ? 1 : 0) + (c && c.work === '12+' ? 1 : 0);
+// Offshore always means a 12 h shift before training; Home/Gym means no work.
+export const afterShift = s => s && s.location === 'Offshore';
 
 // Measured performance drop (fraction) under low sleep / long work, from app-logged sessions.
 export function learnFactors(sessions, exercises) {
@@ -51,7 +52,7 @@ export function learnFactors(sessions, exercises) {
         const ref = [...hist.slice(-3)].sort((a, c) => a - c)[Math.floor(Math.min(3, hist.length) / 2)];
         const ratio = b.score / ref;
         (s.sleep <= 5 ? groups.sleepLow : groups.sleepOk).push(ratio);
-        (s.work === '12+' ? groups.work12 : groups.workOk).push(ratio);
+        (afterShift(s) ? groups.work12 : groups.workOk).push(ratio);
       }
       hist.push(b.score);
     }
@@ -76,7 +77,7 @@ export function lastSummary(exId, sessions, beforeIso) {
 }
 
 /**
- * ctx: { location, sleep, work, start (iso), position (0-based) }
+ * ctx: { location, sleep, start (iso), position (0-based) }
  * returns { kind: 'rec'|'last'|'none', weight, reps, sets, reasons[], base }
  */
 export function recommend(ex, ctx, { sessions, runs = [], learned = {} }) {
@@ -129,15 +130,15 @@ export function recommend(ex, ctx, { sessions, runs = [], learned = {} }) {
 
   // Context adjustments relative to the baseline session's context.
   let adj = 0;
-  const lowSleep = ctx.sleep != null && ctx.sleep <= 5, longWork = ctx.work === '12+';
-  const baseLowSleep = base.s.sleep != null && base.s.sleep <= 5, baseLongWork = base.s.work === '12+';
+  const lowSleep = ctx.sleep != null && ctx.sleep <= 5, longWork = afterShift(ctx);
+  const baseLowSleep = base.s.sleep != null && base.s.sleep <= 5, baseLongWork = afterShift(base.s);
   if (lowSleep && !baseLowSleep) {
     const n = learned.sleep != null ? repsLost(target, learned.sleep) : 1;
     if (n) { adj -= n; reasons.push(learned.sleep != null ? `Low sleep: your data shows −${Math.round(learned.sleep * 100)}% → −${n} rep.` : 'Low sleep (≤5 h) → −1 rep.'); }
   }
   if (longWork && !baseLongWork) {
     const n = learned.work != null ? repsLost(target, learned.work) : 1;
-    if (n) { adj -= n; reasons.push(learned.work != null ? `After 12+ h work: your data shows −${Math.round(learned.work * 100)}% → −${n} rep.` : 'After 12+ h work → −1 rep.'); }
+    if (n) { adj -= n; reasons.push(learned.work != null ? `Offshore after a 12 h shift: your data shows −${Math.round(learned.work * 100)}% → −${n} rep.` : 'Offshore after a 12 h shift (baseline was not) → −1 rep.'); }
   }
   if (ctx.position != null) {
     const orders = hist.slice(0, 5).map(h => h.entry.order).filter(o => o != null);

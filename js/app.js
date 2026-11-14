@@ -14,7 +14,6 @@ let draft = null;          // plan being built
 let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
-const WORK = ['0', '<8', '8-12', '12+'];
 const RUN_TYPES = ['Easy', 'Tempo', 'Interval', 'Long', 'Race', 'Treadmill'];
 const $app = () => document.getElementById('app');
 const exById = id => S.exercises.find(e => e.id === id);
@@ -165,7 +164,7 @@ function activityList(limit, filter = 'all') {
 
 // ---------- PLAN ----------
 function newDraft() {
-  return { location: null, sleep: null, work: null, exIds: [] };
+  return { location: null, sleep: null, exIds: [] };
 }
 const saveDraft = () => setMeta('draft', draft);
 
@@ -194,7 +193,6 @@ routes.plan = function plan() {
   <section class="card">
     <label>Location</label>${chips('location', LOCS.map(l => [l, l]), draft.location)}
     <label>Sleep last night (h)</label>${chips('sleep', SLEEP, draft.sleep)}
-    <label>Work before this session (h)</label>${chips('work', WORK.map(w => [w, w]), draft.work)}
   </section>
   <section>
     <h2>Exercises <span class="muted small">${draft.exIds.length ? `${draft.exIds.length} planned` : ''}</span></h2>
@@ -209,7 +207,7 @@ routes.plan = function plan() {
 };
 
 function planCtx() {
-  return { location: draft.location || 'Home', sleep: draft.sleep != null ? +draft.sleep : null, work: draft.work, start: nowIso() };
+  return { location: draft.location || 'Home', sleep: draft.sleep != null ? +draft.sleep : null, start: nowIso() };
 }
 
 // ---------- exercise picker (modal) ----------
@@ -239,7 +237,7 @@ routes.workout = function workout(id) {
   const cards = s.entries.map((e, ei) => entryCard(s, e, ei, order)).join('');
   return `
   <header class="top"><button class="back" data-act="goto" data-h="#/">‹</button><h1>${editing ? 'Edit session' : 'Session'}</h1><span class="right">${locBadge(s.location)}</span></header>
-  <p class="muted small ctxline">${fmtDate(s.start)} · ${fmtTime(s.start)}${s.sleep != null ? ` · sleep ${s.sleep >= 8 ? '8+' : s.sleep <= 4 ? '≤4' : s.sleep} h` : ''}${s.work != null ? ` · work ${s.work} h` : ''}</p>
+  <p class="muted small ctxline">${fmtDate(s.start)} · ${fmtTime(s.start)}${s.sleep != null ? ` · sleep ${s.sleep >= 8 ? '8+' : s.sleep <= 4 ? '≤4' : s.sleep} h` : ''}</p>
   ${cards}
   <div class="actions"><button class="btn" data-act="openPicker" data-mode="session" data-id="${s.id}">+ Add exercise</button></div>
   <div class="sticky row2">
@@ -336,7 +334,7 @@ routes.session = function session(id) {
   <header class="top"><button class="back" data-act="goto" data-h="#/history">‹</button><h1>${fmtDate(s.start)}</h1></header>
   <section class="card">
     <label>Location</label>${chips(`sloc:${s.id}`, LOCS.map(l => [l, l]), s.location)}
-    <p class="muted small">${fmtTime(s.start)}${dur ? ` · ${fmtDur(dur)}` : ''}${s.sleep != null ? ` · sleep ${s.sleep >= 8 ? '8+' : s.sleep} h` : ''}${s.work != null ? ` · work ${s.work} h` : ''}${s.source === 'hevy' ? ' · imported from Hevy' : ''}</p>
+    <p class="muted small">${fmtTime(s.start)}${dur ? ` · ${fmtDur(dur)}` : ''}${s.sleep != null ? ` · sleep ${s.sleep >= 8 ? '8+' : s.sleep} h` : ''}${s.source === 'hevy' ? ' · imported from Hevy' : ''}</p>
   </section>
   ${body}
   <div class="actions"><button class="btn" data-act="goto" data-h="#/workout/${s.id}">Edit sets</button><button class="btn danger" data-act="delSession" data-id="${s.id}">Delete</button></div>`;
@@ -355,7 +353,7 @@ routes.history.tab = 'history';
 routes.run = function run(id) {
   const isNew = id === 'new';
   let r;
-  if (isNew) r = ui.runDraft || (ui.runDraft = { id: uid(), date: nowIso(), type: 'Easy', distKm: null, durSec: null, avgHr: null, rpe: null, location: null, sleep: null, work: null, notes: '', raceName: '' });
+  if (isNew) r = ui.runDraft || (ui.runDraft = { id: uid(), date: nowIso(), type: 'Easy', distKm: null, durSec: null, avgHr: null, rpe: null, location: null, sleep: null, notes: '', raceName: '' });
   else if (ui.runEdit && ui.runEdit.id === id) r = ui.runEdit;
   else { const found = S.runs.find(x => x.id === id); r = found ? { ...found } : null; }
   if (!r) return `<p>Run not found.</p>`;
@@ -375,7 +373,6 @@ routes.run = function run(id) {
     <label>Effort (RPE 1–10)</label>${chips('rrpe', Array.from({ length: 10 }, (_, i) => [i + 1, i + 1]), r.rpe)}
     <label>Location</label>${chips('rloc', LOCS.map(l => [l, l]), r.location)}
     <label>Sleep last night (h)</label>${chips('rsleep', SLEEP, r.sleep)}
-    <label>Work before run (h)</label>${chips('rwork', WORK.map(w => [w, w]), r.work)}
     <label>Notes</label><textarea data-run="notes" rows="2">${esc(r.notes || '')}</textarea>
   </section>
   <div class="actions">
@@ -649,7 +646,7 @@ const actions = {
   chip: el => {
     const { name, val } = el.dataset;
     const v = val === 'true' ? true : val === 'false' ? false : val;
-    if (['location', 'sleep', 'work'].includes(name)) {
+    if (['location', 'sleep'].includes(name)) {
       draft[name] = String(draft[name]) === String(v) ? null : name === 'sleep' ? +v : v;
       saveDraft();
     } else if (name === 'histFilter') ui.histFilter = v;
@@ -662,9 +659,9 @@ const actions = {
     } else if (name.startsWith('sloc:')) {
       const s = S.sessions.find(x => x.id === name.split(':')[1]);
       s.location = v; save('sessions', s); toast('Location updated');
-    } else if (['rtype', 'rrpe', 'rloc', 'rsleep', 'rwork'].includes(name)) {
+    } else if (['rtype', 'rrpe', 'rloc', 'rsleep'].includes(name)) {
       const r = ui.runEdit;
-      const key = { rtype: 'type', rrpe: 'rpe', rloc: 'location', rsleep: 'sleep', rwork: 'work' }[name];
+      const key = { rtype: 'type', rrpe: 'rpe', rloc: 'location', rsleep: 'sleep' }[name];
       const nv = ['rpe', 'sleep'].includes(key) ? +v : v;
       r[key] = r[key] === nv && key !== 'type' ? null : nv;
     } else if (name.startsWith('ex:')) {
@@ -714,7 +711,7 @@ const actions = {
   },
   startSession: () => {
     if (!draft.location || !draft.exIds.length) return;
-    const s = { id: uid(), start: nowIso(), end: null, location: draft.location, sleep: draft.sleep, work: draft.work, entries: [], status: 'active', source: 'app' };
+    const s = { id: uid(), start: nowIso(), end: null, location: draft.location, sleep: draft.sleep, entries: [], status: 'active', source: 'app' };
     draft.exIds.forEach(id => addEntry(s, id));
     save('sessions', s);
     draft = null; setMeta('draft', null);
@@ -786,7 +783,7 @@ const actions = {
         const ex = exById(e.exId);
         if (!ex) return;
         e.sets.forEach((st, i) => {
-          const base = { date: s.start.slice(0, 10), time: s.start.slice(11), location: s.location, sleep_h: s.sleep ?? '', work_h: s.work ?? '', exercise: ex.name, kind: ex.kind, group: ex.group, load: ex.load, order: e.order + 1, set: i + 1 };
+          const base = { date: s.start.slice(0, 10), time: s.start.slice(11), location: s.location, sleep_h: s.sleep ?? '', work_h: s.location === 'Offshore' ? 12 : 0, exercise: ex.name, kind: ex.kind, group: ex.group, load: ex.load, order: e.order + 1, set: i + 1 };
           rows.push({ ...base, drop: 0, weight_kg: st.w ?? '', reps: st.r ?? '', reps_right: st.rR ?? '', reps_left: st.rL ?? '', sec: st.sec ?? st.secR ?? '', sec_left: st.secL ?? '', metres: st.m ?? '', reps_in_tank: st.rir ?? '', rpe: st.rpe ?? '', rest_sec: st.doneAt && restFor(st.doneAt, order) != null ? Math.round(restFor(st.doneAt, order)) : '', note: e.note || '' });
           (st.drop || []).forEach(d => rows.push({ ...base, drop: 1, weight_kg: d.w ?? '', reps: d.r ?? '', reps_right: '', reps_left: '', sec: '', sec_left: '', metres: '', reps_in_tank: '', rpe: '', rest_sec: '', note: '' }));
         });
@@ -794,7 +791,7 @@ const actions = {
     }
     const stamp = today();
     downloadFile(`lift-run-journey-sets-${stamp}.csv`, toCSV(rows), 'text/csv');
-    const runs = [...S.runs].sort((a, b) => (a.date < b.date ? -1 : 1)).map(r => ({ date: r.date.slice(0, 10), time: r.date.slice(11), type: r.type, race: r.raceName || '', distance_km: r.distKm, duration_sec: r.durSec, pace_sec_per_km: r.distKm ? Math.round(r.durSec / r.distKm) : '', avg_hr: r.avgHr ?? '', rpe: r.rpe ?? '', location: r.location ?? '', sleep_h: r.sleep ?? '', work_h: r.work ?? '', notes: r.notes || '' }));
+    const runs = [...S.runs].sort((a, b) => (a.date < b.date ? -1 : 1)).map(r => ({ date: r.date.slice(0, 10), time: r.date.slice(11), type: r.type, race: r.raceName || '', distance_km: r.distKm, duration_sec: r.durSec, pace_sec_per_km: r.distKm ? Math.round(r.durSec / r.distKm) : '', avg_hr: r.avgHr ?? '', rpe: r.rpe ?? '', location: r.location ?? '', sleep_h: r.sleep ?? '', work_h: r.location === 'Offshore' ? 12 : r.location ? 0 : '', notes: r.notes || '' }));
     setTimeout(() => downloadFile(`lift-run-journey-runs-${stamp}.csv`, toCSV(runs), 'text/csv'), 600);
     toast('CSV exported (sets + runs)');
   },
@@ -830,7 +827,7 @@ function addEntry(s, exId) {
   const ex = exById(exId);
   const position = s.entries.length;
   const learned = learnFactors(S.sessions, S.exercises);
-  const rec = recommend(ex, { location: s.location, sleep: s.sleep, work: s.work, start: s.start, position }, { sessions: S.sessions, runs: S.runs, learned });
+  const rec = recommend(ex, { location: s.location, sleep: s.sleep, start: s.start, position }, { sessions: S.sessions, runs: S.runs, learned });
   const n = rec.kind === 'rec' ? rec.sets : rec.kind === 'last' && rec.last ? rec.last.sets.length : 2;
   s.entries.push({ exId, order: position, target: rec.kind === 'none' ? null : rec, sets: Array.from({ length: Math.max(1, n) }, () => ({ drop: [] })), note: '' });
 }

@@ -13,8 +13,8 @@ Personal lifting + running + mobility log. Offline-first, single user, no accoun
 |---|---|
 | Location | Home / Gym / Offshore |
 | Sleep last night | ≤4, 5, 6, 7, 8+ h |
-| Work before session | 0, <8, 8–12, 12+ h |
 
+Work hours are not asked: Offshore always means a 12 h shift before training, Home/Gym means no work.
 Performance is compared against sessions in the same location first.
 
 ## Exercises
@@ -31,7 +31,7 @@ Each exercise has:
 - Weight is typed manually, never a dropdown.
 
 ## Lift session flow
-1. **Check-in**: location, sleep, work hours.
+1. **Check-in**: location, sleep.
 2. **Plan**: pick 5–7 exercises and order them. The app shows a recommended weight × reps × sets for each, with the reasons.
 3. **Log**: enter actual weight and reps per set (Left/Right for unilateral). Optional "reps left in tank" (0/1/2/3+) on the last set. Drop sets are added to a set and count for volume, not for recommendations.
 4. **Rest time**: recorded automatically from the time between "set done" taps.
@@ -46,13 +46,13 @@ For unilateral exercises, the weaker side counts.
 1. **Double progression**: all working sets ≥ top of rep range → add one weight step and reset to the bottom of the range. Otherwise add 1 rep (to the top of the range).
 2. **Last set at 0 reps in tank and below range** → keep or drop the weight.
 3. **Downtrend**: estimated 1RM down two sessions in a row (same location) → hold. Down three in a row → drop one step.
-4. **Context**: sleep ≤5 h → −1 rep; work 12+ h → −1 rep. Once there is enough history (≥6 sessions in each condition), the app replaces these fixed rules with your own measured drop in performance.
+4. **Context**: sleep ≤5 h → −1 rep; Offshore (12 h shift) when the baseline session was not Offshore → −1 rep. Once there is enough history (≥6 sessions in each condition), the app replaces these fixed rules with your own measured drop in performance.
 5. **Order**: the exercise is planned 2+ positions later than usual → −1 rep.
 6. **Running load**: a long run (≥15 km, or type Long/Race) in the last 36 h → −1 rep for leg exercises.
 7. If adjustments push reps more than 2 below the range → drop one weight step instead.
 
 ## Running
-Manual entry (~30 s): date, type (Easy, Tempo, Interval, Long, Race, Treadmill), distance, duration, avg HR (optional), RPE 1–10, location, sleep, work hours, notes. Pace is calculated.
+Manual entry (~30 s): date, type (Easy, Tempo, Interval, Long, Race, Treadmill), distance, duration, avg HR (optional), RPE 1–10, location, sleep, notes. Pace is calculated.
 Races: name, date, distance, target time, linked result → countdown on home screen.
 
 ## Mobility and core

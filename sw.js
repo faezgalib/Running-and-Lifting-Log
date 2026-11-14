@@ -1,5 +1,5 @@
 // Offline cache. Bump VERSION whenever app files change so phones pick up the update.
-const VERSION = 'lrj-v1';
+const VERSION = 'lrj-v2';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/db.js', 'js/util.js', 'js/seed.js', 'js/recommend.js', 'js/hevy.js', 'js/charts.js',

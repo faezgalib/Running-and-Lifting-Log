@@ -69,7 +69,8 @@ Optional log at any time.
 - Body weight
 
 ## Data
-- Export: full JSON backup + CSV for Excel. Home screen shows "last backup X days ago".
+- Export: full JSON backup + CSV for Excel (two files: sets, runs).
+- Backup reminder: a small dot on the **More** tab after 7 days without a backup. No warning text on the home screen.
 - Import: JSON backup (restore), Hevy CSV.
 
 ### Hevy CSV import
@@ -80,5 +81,22 @@ Optional log at any time.
 - Notes "Kiri beda N" → Left = Right − N for unilateral exercises. All other notes are kept as text.
 - Weights are imported exactly as recorded (some exercises are a total of 2 dumbbells).
 
+## Home screen
+- Logo, app name, greeting by time of day.
+- One positive line per day (rotating list). Sundays always show "No human is limited. — Eliud Kipchoge".
+- Last-30-days summary (sessions, runs, km), next race countdown, quick actions, recent activity.
+- Tone: positive. No warnings or negative messages on the home screen.
+
+## Updates and data use
+- Service worker is cache-first: opening the app uses no data except the browser's ~1 KB check of `sw.js`.
+- The full app (~120 KB) downloads again only when `VERSION` in `sw.js` changes.
+- A new version reloads the app automatically, except while a session or run is being logged.
+- Every release: bump `VERSION` in `sw.js` and `APP_VERSION` in `js/app.js` (shown at the bottom of More).
+
+## Security
+- Content-Security-Policy in `index.html`: the app loads only its own files and cannot connect to other hosts.
+- `main` is protected by the `protect-main` ruleset (no deletion, no force push, pull request required).
+- Owner account uses 2FA. Changes reach the phone only after the owner merges a pull request.
+
 ## Tech
-Vanilla JS (ES modules), no build step, IndexedDB, service worker for offline use, hand-written SVG charts. Hosted on GitHub Pages.
+Vanilla JS (ES modules), no build step, IndexedDB, service worker for offline use, hand-written SVG charts. Hosted on GitHub Pages from `main`.

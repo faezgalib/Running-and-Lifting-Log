@@ -12,7 +12,7 @@ import { lineChart, barChart, legend, LOC_COLORS } from './charts.js';
 const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], meta: {} };
 let draft = null;          // plan being built
 let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
-const APP_VERSION = 'v4';
+const APP_VERSION = 'v5';
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
 const RUN_TYPES = ['Easy', 'Tempo', 'Interval', 'Long', 'Race', 'Treadmill'];
@@ -945,10 +945,7 @@ window.addEventListener('hashchange', route);
   }
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     const hadController = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.register('sw.js').then(reg => {
-      // Check for a new version every time the app comes back to the foreground.
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
-    }).catch(() => {});
+    navigator.serviceWorker.register('sw.js').catch(() => {});
     // New version installed: reload, but never in the middle of logging a session.
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!hadController) return;

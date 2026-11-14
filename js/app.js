@@ -12,6 +12,7 @@ import { lineChart, barChart, legend, LOC_COLORS } from './charts.js';
 const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], meta: {} };
 let draft = null;          // plan being built
 let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
+const APP_VERSION = 'v4';
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
 const RUN_TYPES = ['Easy', 'Tempo', 'Interval', 'Long', 'Race', 'Treadmill'];
@@ -146,6 +147,7 @@ routes[''] = function home() {
 routes[''].tab = '';
 
 const LINES = [
+  'No human is limited. — Eliud Kipchoge',
   'Consistency beats intensity.', 'Small steps, every day.', 'Show up. The rest follows.',
   'Progress, not perfection.', 'Strong body, calm mind.', 'Today counts.', 'Train smart, recover well.',
   'Every session is a deposit.', 'Slow is smooth, smooth is fast.', 'Your only competition is yesterday.',
@@ -158,6 +160,7 @@ function greeting() {
 function dailyLine() {
   const d = new Date();
   const doy = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
+  if (d.getDay() === 0) return LINES[0]; // Sundays: Kipchoge
   return LINES[doy % LINES.length];
 }
 function momentum() {
@@ -520,7 +523,7 @@ routes.more = function more() {
   <a class="card row" href="#/races"><b>Races</b><span class="muted">${S.races.length} ›</span></a>
   <a class="card row" href="#/body"><b>Body weight</b><span class="muted">${S.bodyweight.length} ›</span></a>
   <a class="card row" href="#/import"><b>Import from Hevy</b><span class="muted">›</span></a>
-  <p class="muted small center">Lift Run Journey · offline · v1</p>`;
+  <p class="muted small center">Lift Run Journey · offline · ${APP_VERSION}</p>`;
 };
 routes.more.tab = 'more';
 routes.more.after = () => {
@@ -940,5 +943,17 @@ window.addEventListener('hashchange', route);
   } catch (e) {
     $app().innerHTML = `<main><p>Could not open storage: ${esc(e.message)}</p></main>`;
   }
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      // Check for a new version every time the app comes back to the foreground.
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+    }).catch(() => {});
+    // New version installed: reload, but never in the middle of logging a session.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) return;
+      if (current?.fn === routes.workout || current?.fn === routes.run) toast('Update ready. It applies next time you open the app.');
+      else location.reload();
+    });
+  }
 })();

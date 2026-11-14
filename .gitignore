@@ -1,0 +1,3 @@
+# Never commit personal training data
+*.csv
+lift-run-journey-backup-*.json

@@ -1,0 +1,177 @@
+// Recommendation engine. Rule-based first; context penalties switch to measured values once enough data exists.
+import { e1rm, parseLocal } from './util.js';
+import { effStep } from './seed.js';
+
+export const repsOf = (set, ex) => {
+  if (ex.unilateral || ex.perSide) {
+    const v = [set.rL, set.rR].filter(x => x != null);
+    if (v.length) return Math.min(...v);
+  }
+  return set.r ?? null;
+};
+
+export const workingSets = (entry, ex) => (entry.sets || []).filter(s => repsOf(s, ex) != null && repsOf(s, ex) > 0);
+
+export function entryBest(entry, ex) {
+  let best = null;
+  for (const s of workingSets(entry, ex)) {
+    const r = repsOf(s, ex), w = s.w || 0;
+    const v = w > 0 ? e1rm(w, r) : r; // bodyweight: reps as score
+    if (!best || v > best.score) best = { w, r, score: v };
+  }
+  return best;
+}
+
+// Done sessions that contain the exercise, newest first.
+export function historyFor(exId, sessions, beforeIso) {
+  return sessions
+    .filter(s => s.status === 'done' && (!beforeIso || s.start < beforeIso))
+    .map(s => ({ s, entry: s.entries.find(e => e.exId === exId) }))
+    .filter(x => x.entry && x.entry.sets && x.entry.sets.length)
+    .sort((a, b) => (a.s.start < b.s.start ? 1 : -1));
+}
+
+const penaltyRule = c => (c && c.sleep != null && c.sleep <= 5 ? 1 : 0) + (c && c.work === '12+' ? 1 : 0);
+
+// Measured performance drop (fraction) under low sleep / long work, from app-logged sessions.
+export function learnFactors(sessions, exercises) {
+  const exById = Object.fromEntries(exercises.map(e => [e.id, e]));
+  const groups = { sleepLow: [], sleepOk: [], work12: [], workOk: [] };
+  const done = sessions.filter(s => s.status === 'done').sort((a, b) => (a.start < b.start ? -1 : 1));
+  const prior = {}; // exId|location -> recent scores
+  for (const s of done) {
+    for (const e of s.entries) {
+      const ex = exById[e.exId];
+      if (!ex || ex.kind !== 'lift') continue;
+      const b = entryBest(e, ex);
+      if (!b) continue;
+      const key = e.exId + '|' + s.location;
+      const hist = prior[key] || (prior[key] = []);
+      if (hist.length >= 2 && s.sleep != null) {
+        const ref = [...hist.slice(-3)].sort((a, c) => a - c)[Math.floor(Math.min(3, hist.length) / 2)];
+        const ratio = b.score / ref;
+        (s.sleep <= 5 ? groups.sleepLow : groups.sleepOk).push(ratio);
+        (s.work === '12+' ? groups.work12 : groups.workOk).push(ratio);
+      }
+      hist.push(b.score);
+    }
+  }
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const f = (low, ok) => (low.length >= 6 && ok.length >= 6 ? Math.max(0, Math.min(0.25, 1 - mean(low) / mean(ok))) : null);
+  return { sleep: f(groups.sleepLow, groups.sleepOk), work: f(groups.work12, groups.workOk), n: groups.sleepLow.length + groups.sleepOk.length };
+}
+
+// Reps lost when performance drops by pct at the same weight (inverse Epley).
+const repsLost = (reps, pct) => Math.round((30 + reps) * pct);
+
+const mode = arr => {
+  const c = {};
+  arr.forEach(v => { c[v] = (c[v] || 0) + 1; });
+  return +Object.entries(c).sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
+};
+
+export function lastSummary(exId, sessions, beforeIso) {
+  const h = historyFor(exId, sessions, beforeIso)[0];
+  return h ? { date: h.s.start, location: h.s.location, sets: h.entry.sets } : null;
+}
+
+/**
+ * ctx: { location, sleep, work, start (iso), position (0-based) }
+ * returns { kind: 'rec'|'last'|'none', weight, reps, sets, reasons[], base }
+ */
+export function recommend(ex, ctx, { sessions, runs = [], learned = {} }) {
+  if (ex.kind !== 'lift') {
+    const last = lastSummary(ex.id, sessions, ctx.start);
+    return { kind: last ? 'last' : 'none', last, reasons: [] };
+  }
+  const hist = historyFor(ex.id, sessions, ctx.start);
+  if (!hist.length) return { kind: 'none', reasons: ['No history yet. Start with a weight you can lift for about 10 clean reps.'] };
+
+  const reasons = [];
+  const same = hist.filter(h => h.s.location === ctx.location);
+  const pool = same.length ? same : hist;
+  const base = pool[0];
+  if (!same.length) reasons.push(`No ${ctx.location} history yet. Based on your last ${base.s.location} session.`);
+
+  const sets = workingSets(base.entry, ex);
+  const step = effStep(ex);
+  const bw = ex.format === 'r' || step === 0;
+  let w = bw ? null : mode(sets.map(s => s.w || 0));
+  const atW = bw ? sets : sets.filter(s => (s.w || 0) === w);
+  const reps = atW.map(s => repsOf(s, ex));
+  const minR = Math.min(...reps);
+  const nSets = Math.max(1, sets.length);
+  const lastRir = atW.length ? atW[atW.length - 1].rir : null;
+  const lo = ex.repMin || 8, hi = ex.repMax || 12;
+
+  // Trend (same location): estimated 1RM across the last sessions, newest first.
+  const scores = pool.slice(0, 4).map(h => (entryBest(h.entry, ex) || {}).score || 0);
+  const drops = (() => { let n = 0; for (let i = 0; i < scores.length - 1 && scores[i] < scores[i + 1]; i++) n++; return n; })();
+
+  let target, increased = false;
+  const baseW = w;
+  if (drops >= 3 && !bw && w - step > 0) {
+    w = +(w - step).toFixed(2); target = lo;
+    reasons.push(`Performance down 3 sessions in a row → drop ${step} kg and rebuild.`);
+  } else if (drops >= 2) {
+    target = minR;
+    reasons.push('Performance down 2 sessions in a row → hold, repeat last session.');
+  } else if (lastRir === 0 && minR < lo && !bw && w - step > 0) {
+    w = +(w - step).toFixed(2); target = lo;
+    reasons.push(`Last set hit failure below ${lo} reps → drop ${step} kg.`);
+  } else if (reps.every(r => r >= hi)) {
+    if (bw) { target = minR + 1; reasons.push(`All sets at ${hi}+ reps → +1 rep.`); }
+    else { w = +(w + step).toFixed(2); target = lo; increased = true; reasons.push(`All sets hit ${hi} reps → +${step} kg, back to ${lo} reps.`); }
+  } else {
+    target = Math.min(minR + 1, hi);
+    reasons.push(target > minR ? `Last: ${minR} reps at ${w ?? 'BW'}${w != null ? ' kg' : ''} → aim +1 rep.` : `Hold at ${minR} reps.`);
+  }
+
+  // Context adjustments relative to the baseline session's context.
+  let adj = 0;
+  const lowSleep = ctx.sleep != null && ctx.sleep <= 5, longWork = ctx.work === '12+';
+  const baseLowSleep = base.s.sleep != null && base.s.sleep <= 5, baseLongWork = base.s.work === '12+';
+  if (lowSleep && !baseLowSleep) {
+    const n = learned.sleep != null ? repsLost(target, learned.sleep) : 1;
+    if (n) { adj -= n; reasons.push(learned.sleep != null ? `Low sleep: your data shows −${Math.round(learned.sleep * 100)}% → −${n} rep.` : 'Low sleep (≤5 h) → −1 rep.'); }
+  }
+  if (longWork && !baseLongWork) {
+    const n = learned.work != null ? repsLost(target, learned.work) : 1;
+    if (n) { adj -= n; reasons.push(learned.work != null ? `After 12+ h work: your data shows −${Math.round(learned.work * 100)}% → −${n} rep.` : 'After 12+ h work → −1 rep.'); }
+  }
+  if (ctx.position != null) {
+    const orders = hist.slice(0, 5).map(h => h.entry.order).filter(o => o != null);
+    if (orders.length) {
+      const usual = orders.reduce((a, b) => a + b, 0) / orders.length;
+      if (ctx.position - usual >= 2) { adj -= 1; reasons.push(`Later in the session than usual (#${ctx.position + 1} vs ~#${Math.round(usual) + 1}) → −1 rep.`); }
+    }
+  }
+  if (ex.group === 'legs' && ctx.start) {
+    const t = parseLocal(ctx.start).getTime();
+    const long = runs.find(r => {
+      const dt = (t - parseLocal(r.date).getTime()) / 3600000;
+      return dt >= 0 && dt <= 36 && (r.distKm >= 15 || r.type === 'Long' || r.type === 'Race');
+    });
+    if (long) { adj -= 1; reasons.push(`Long run in the last 36 h (${long.distKm} km) → −1 rep for legs.`); }
+  }
+
+  // Tired today: don't add weight. Stay at the last weight and take the rep penalty from there.
+  if (increased && adj < 0) {
+    w = baseW;
+    target = Math.min(minR, hi + 2);
+    reasons.push(`Not a day to add weight → stay at ${baseW} kg.`);
+  }
+
+  let finalReps = target + adj;
+  if (finalReps < lo - 2 && !bw && w - step > 0) {
+    w = +(w - step).toFixed(2);
+    finalReps = target;
+    reasons.push(`Too many reps lost → drop ${step} kg instead and keep ${target} reps.`);
+  }
+  finalReps = Math.max(1, finalReps);
+
+  return {
+    kind: 'rec', weight: w, reps: finalReps, sets: nSets, reasons,
+    base: { date: base.s.start, location: base.s.location, sets: base.entry.sets },
+  };
+}

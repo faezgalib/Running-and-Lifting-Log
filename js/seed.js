@@ -44,7 +44,7 @@ const UNILATERAL = [
 // Exercises recorded as the total of two dumbbells.
 const TOTAL_LOAD = [
   'Standing Calf Raise (Dumbbell)', 'Squat (Dumbbell)', 'Lunge (Dumbbell)', 'Reverse Lunge (Dumbbell)',
-  'Romanian Deadlift (Dumbbell)', 'Goblet Squat', 'Rear Delt Reverse Fly (Dumbbell)',
+  'Romanian Deadlift (Dumbbell)', 'Rear Delt Reverse Fly (Dumbbell)',
   'Bulgarian Split Squat (Dumbbell)', 'Sumo Squat (Dumbbell)', 'Farmers Walk',
 ];
 

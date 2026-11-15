@@ -148,3 +148,26 @@ ol.sets li { margin: 3px 0; }
 .tabbar svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 .toast { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 12px; z-index: 30; font-size: 14px; box-shadow: 0 6px 24px rgba(0, 0, 0, .4); }
+
+/* exercise name opens its history */
+.exname { flex: 1; min-width: 0; background: none; border: 0; padding: 0; color: var(--text); font: inherit; font-weight: 700; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 4px; }
+.exname:active { color: var(--accent); }
+.setrow.drop.dcols3 { grid-template-columns: 22px 1fr 1fr 1fr 44px; }
+
+/* picker: recent block */
+.recent { background: var(--surface2); border: 1px solid var(--line); border-radius: 12px; padding: 2px 12px 4px; margin-top: 10px; }
+.recent .pick:last-child { border-bottom: 0; }
+.sheetbody h3.recenth { color: var(--accent); margin-top: 10px; }
+
+/* history sheet */
+.sheet.hist { height: 80vh; }
+.sheethead .grow { flex: 1; align-self: center; font-size: 16px; }
+.hrow { padding: 10px 0; border-bottom: 1px solid var(--line); display: grid; gap: 4px; }
+.hhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.hmeta { display: flex; gap: 12px; }
+
+/* muscle map */
+.musclemap { width: calc(100% + 16px); height: auto; display: block; margin: 4px -8px; }
+.musclemap .mn { fill: var(--muted); font-size: 13px; }
+.musclemap .mv { fill: var(--text); font-size: 13.5px; font-weight: 700; }
+.musclemap .mv.zero { fill: var(--muted); font-weight: 400; }

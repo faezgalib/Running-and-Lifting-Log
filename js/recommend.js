@@ -48,10 +48,11 @@ export function learnFactors(sessions, exercises) {
       if (!b) continue;
       const key = e.exId + '|' + s.location;
       const hist = prior[key] || (prior[key] = []);
-      if (hist.length >= 2 && s.sleep != null) {
+      if (hist.length >= 2 && s.source !== 'hevy') {
         const ref = [...hist.slice(-3)].sort((a, c) => a - c)[Math.floor(Math.min(3, hist.length) / 2)];
         const ratio = b.score / ref;
-        (s.sleep <= 5 ? groups.sleepLow : groups.sleepOk).push(ratio);
+        // Sleep is only meaningful away from the rig (offshore training always follows a 12 h shift).
+        if (s.sleep != null && !afterShift(s)) (s.sleep <= 5 ? groups.sleepLow : groups.sleepOk).push(ratio);
         (afterShift(s) ? groups.work12 : groups.workOk).push(ratio);
       }
       hist.push(b.score);
@@ -78,7 +79,7 @@ export function lastSummary(exId, sessions, beforeIso) {
 
 /**
  * ctx: { location, sleep, start (iso), position (0-based) }
- * returns { kind: 'rec'|'last'|'none', weight, reps, sets, reasons[], base }
+ * returns { kind: 'rec'|'last'|'none', weight, reps (lowest set), repsBySet[], sets, reasons[], base }
  */
 export function recommend(ex, ctx, { sessions, runs = [], learned = {} }) {
   if (ex.kind !== 'lift') {
@@ -102,42 +103,56 @@ export function recommend(ex, ctx, { sessions, runs = [], learned = {} }) {
   const reps = atW.map(s => repsOf(s, ex));
   const minR = Math.min(...reps);
   const nSets = Math.max(1, sets.length);
+  // Per-set baseline: set i follows set i of the last session (later sets are usually lower).
+  const baseBySet = Array.from({ length: nSets }, (_, i) => reps[Math.min(i, reps.length - 1)]);
   const lastRir = atW.length ? atW[atW.length - 1].rir : null;
+  const rirTxt = lastRir == null ? '' : lastRir >= 3 ? '3+ reps left' : `${lastRir} rep${lastRir === 1 ? '' : 's'} left`;
   const lo = ex.repMin || 8, hi = ex.repMax || 12;
+  const kg = v => `${v} kg`;
 
   // Trend (same location): estimated 1RM across the last sessions, newest first.
   const scores = pool.slice(0, 4).map(h => (entryBest(h.entry, ex) || {}).score || 0);
   const drops = (() => { let n = 0; for (let i = 0; i < scores.length - 1 && scores[i] < scores[i + 1]; i++) n++; return n; })();
 
-  let target, increased = false;
+  let targets, increased = false;
   const baseW = w;
+  const all = v => baseBySet.map(() => v);
   if (drops >= 3 && !bw && w - step > 0) {
-    w = +(w - step).toFixed(2); target = lo;
+    w = +(w - step).toFixed(2); targets = all(lo);
     reasons.push(`Performance down 3 sessions in a row → drop ${step} kg and rebuild.`);
   } else if (drops >= 2) {
-    target = minR;
+    targets = [...baseBySet];
     reasons.push('Performance down 2 sessions in a row → hold, repeat last session.');
   } else if (lastRir === 0 && minR < lo && !bw && w - step > 0) {
-    w = +(w - step).toFixed(2); target = lo;
+    w = +(w - step).toFixed(2); targets = all(lo);
     reasons.push(`Last set hit failure below ${lo} reps → drop ${step} kg.`);
-  } else if (reps.every(r => r >= hi)) {
-    if (bw) { target = minR + 1; reasons.push(`All sets at ${hi}+ reps → +1 rep.`); }
-    else { w = +(w + step).toFixed(2); target = lo; increased = true; reasons.push(`All sets hit ${hi} reps → +${step} kg, back to ${lo} reps.`); }
+  } else if (reps.every(r => r >= hi) || (lastRir >= 3 && minR >= hi - 1)) {
+    const why = reps.every(r => r >= hi) ? `All sets hit ${hi} reps` : `${minR} reps with ${rirTxt}`;
+    if (bw) { const inc = lastRir >= 3 ? 2 : 1; targets = baseBySet.map(r => r + inc); reasons.push(`${why} → +${inc} rep${inc > 1 ? 's' : ''}.`); }
+    else { w = +(w + step).toFixed(2); targets = all(lo); increased = true; reasons.push(`${why} → +${step} kg, back to ${lo} reps.`); }
   } else {
-    target = Math.min(minR + 1, hi);
-    reasons.push(target > minR ? `Last: ${minR} reps at ${w ?? 'BW'}${w != null ? ' kg' : ''} → aim +1 rep.` : `Hold at ${minR} reps.`);
+    // Reps in the tank on the last set decide the size of the step.
+    const inc = lastRir === 0 ? 0 : lastRir >= 3 ? 2 : 1;
+    targets = baseBySet.map(r => Math.min(r + inc, Math.max(hi, r)));
+    const lastTxt = `Last: ${[...new Set(baseBySet)].length > 1 ? baseBySet.join(', ') : minR} reps${w != null ? ` at ${kg(w)}` : ''}`;
+    reasons.push(inc === 0 ? `${lastTxt}, last set to failure → repeat, no increase.`
+      : inc === 2 ? `${lastTxt} with ${rirTxt} → +2 reps.`
+      : `${lastTxt}${rirTxt ? ` with ${rirTxt}` : ''} → +1 rep.`);
   }
 
   // Context adjustments relative to the baseline session's context.
   let adj = 0;
-  const lowSleep = ctx.sleep != null && ctx.sleep <= 5, longWork = afterShift(ctx);
-  const baseLowSleep = base.s.sleep != null && base.s.sleep <= 5, baseLongWork = afterShift(base.s);
+  const offshore = afterShift(ctx);
+  // Offshore: sleep is recorded but not used. The offshore baseline already reflects training after a shift.
+  const lowSleep = !offshore && ctx.sleep != null && ctx.sleep <= 5;
+  const baseLowSleep = !afterShift(base.s) && base.s.sleep != null && base.s.sleep <= 5;
+  const tMax = Math.max(...targets);
   if (lowSleep && !baseLowSleep) {
-    const n = learned.sleep != null ? repsLost(target, learned.sleep) : 1;
+    const n = learned.sleep != null ? repsLost(tMax, learned.sleep) : 1;
     if (n) { adj -= n; reasons.push(learned.sleep != null ? `Low sleep: your data shows −${Math.round(learned.sleep * 100)}% → −${n} rep.` : 'Low sleep (≤5 h) → −1 rep.'); }
   }
-  if (longWork && !baseLongWork) {
-    const n = learned.work != null ? repsLost(target, learned.work) : 1;
+  if (offshore && !afterShift(base.s)) {
+    const n = learned.work != null ? repsLost(tMax, learned.work) : 1;
     if (n) { adj -= n; reasons.push(learned.work != null ? `Offshore after a 12 h shift: your data shows −${Math.round(learned.work * 100)}% → −${n} rep.` : 'Offshore after a 12 h shift (baseline was not) → −1 rep.'); }
   }
   if (ctx.position != null) {
@@ -156,23 +171,24 @@ export function recommend(ex, ctx, { sessions, runs = [], learned = {} }) {
     if (long) { adj -= 1; reasons.push(`Long run in the last 36 h (${long.distKm} km) → −1 rep for legs.`); }
   }
 
-  // Tired today: don't add weight. Stay at the last weight and take the rep penalty from there.
-  if (increased && adj < 0) {
+  // Tired today: don't add weight, unless the last session clearly had room (3+ reps left).
+  if (increased && adj < 0 && !(lastRir >= 3)) {
     w = baseW;
-    target = Math.min(minR, hi + 2);
-    reasons.push(`Not a day to add weight → stay at ${baseW} kg.`);
+    targets = baseBySet.map(r => Math.min(r, hi + 2));
+    reasons.push(`Not a day to add weight → stay at ${kg(baseW)}.`);
   }
 
-  let finalReps = target + adj;
-  if (finalReps < lo - 2 && !bw && w - step > 0) {
+  let finalBySet = targets.map(t => t + adj);
+  if (Math.min(...finalBySet) < lo - 2 && !bw && w - step > 0) {
     w = +(w - step).toFixed(2);
-    finalReps = target;
-    reasons.push(`Too many reps lost → drop ${step} kg instead and keep ${target} reps.`);
+    finalBySet = [...targets];
+    reasons.push(`Too many reps lost → drop ${step} kg instead.`);
   }
-  finalReps = Math.max(1, finalReps);
+  finalBySet = finalBySet.map(r => Math.max(1, r));
+  const finalReps = Math.min(...finalBySet);
 
   return {
-    kind: 'rec', weight: w, reps: finalReps, sets: nSets, reasons,
+    kind: 'rec', weight: w, reps: finalReps, repsBySet: finalBySet, sets: nSets, reasons,
     base: { date: base.s.start, location: base.s.location, sets: base.entry.sets },
   };
 }

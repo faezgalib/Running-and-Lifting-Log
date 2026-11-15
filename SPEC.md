@@ -15,6 +15,7 @@ Personal lifting + running + mobility log. Offline-first, single user, no accoun
 | Sleep last night | ≤4, 5, 6, 7, 8+ h |
 
 Work hours are not asked: Offshore always means a 12 h shift before training, Home/Gym means no work.
+Offshore: sleep can still be recorded, but it is not used for targets (training on the rig always follows a shift, sleep comes after). Offshore targets follow previous offshore sessions and RIR.
 Performance is compared against sessions in the same location first.
 
 ## Exercises
@@ -33,20 +34,21 @@ Each exercise has:
 ## Lift session flow
 1. **Check-in**: location, sleep.
 2. **Plan**: pick 5–7 exercises and order them. The app shows a recommended weight × reps × sets for each, with the reasons.
-3. **Log**: enter actual weight and reps per set (Left/Right for unilateral). Optional "reps left in tank" (0/1/2/3+) on the last set. Drop sets are added to a set and count for volume, not for recommendations.
-4. **Rest time**: recorded automatically from the time between "set done" taps.
+3. **Log**: enter actual weight and reps per set (Left/Right for unilateral). Optional "reps left in tank" (0/1/2/3+) on the last set. Drop sets are added to a set (with Left/Right reps for unilateral exercises) and count for volume, not for recommendations.
+4. **Rest time**: time between "set done" taps of the same exercise. Switching to another exercise is not counted as rest.
 5. **Finish**: summary of target vs actual.
 
 The active session is saved continuously, so closing the app does not lose it.
 
 ## Recommendation rules (lift only; core and mobility show last session only)
 Baseline = most recent session of that exercise in the same location (else any location).
-For unilateral exercises, the weaker side counts.
+For unilateral exercises, the weaker side counts. Targets are **per set**: set 1 follows set 1 of the last session, set 2 follows set 2, and so on.
 
-1. **Double progression**: all working sets ≥ top of rep range → add one weight step and reset to the bottom of the range. Otherwise add 1 rep (to the top of the range).
-2. **Last set at 0 reps in tank and below range** → keep or drop the weight.
+1. **Double progression**: all working sets ≥ top of rep range → add one weight step and reset to the bottom of the range.
+2. **Reps in reserve (last set)**: 0 → repeat, no increase · 1–2 → +1 rep · 3+ → +2 reps, or add weight if already within 1 rep of the top. Missing a target simply becomes the new baseline.
+   Last set at 0 reps in tank and below range → drop one weight step.
 3. **Downtrend**: estimated 1RM down two sessions in a row (same location) → hold. Down three in a row → drop one step.
-4. **Context**: sleep ≤5 h → −1 rep; Offshore (12 h shift) when the baseline session was not Offshore → −1 rep. Once there is enough history (≥6 sessions in each condition), the app replaces these fixed rules with your own measured drop in performance.
+4. **Context**: sleep ≤5 h → −1 rep (Home/Gym only); Offshore (12 h shift) when the baseline session was not Offshore → −1 rep. Once there is enough history (≥6 sessions in each condition), the app replaces these fixed rules with your own measured drop in performance. Tired days block a weight increase unless the last session ended with 3+ reps in reserve.
 5. **Order**: the exercise is planned 2+ positions later than usual → −1 rep.
 6. **Running load**: a long run (≥15 km, or type Long/Race) in the last 36 h → −1 rep for leg exercises.
 7. If adjustments push reps more than 2 below the range → drop one weight step instead.
@@ -61,6 +63,18 @@ Logged inside any session. Formats: reps / hold / distance, optional per side. N
 
 ## Body weight
 Optional log at any time.
+
+## Exercise history
+Tap an exercise name (plan, session, summary) → last 10 sessions of that exercise with date, location, sets, est. 1RM and reps in reserve, plus a small chart.
+
+## Exercise picker
+**Recent** (5 most recently used) on top, clearly labelled. Everything else A–Z, grouped Lifts / Core / Mobility. Searching shows A–Z only.
+
+## Muscle map
+Labelled body figure (front/back toggle), one green scale, set counts per muscle.
+- Shown after finishing a session ("Muscles worked") and weekly in Progress (this week / last week).
+- Counted in **working sets**. Primary muscle = 1 set, major helper = ½, minor helper = ¼. Mobility is not counted; core/abs is.
+- The exercise → muscle table lives in `js/muscles.js` (`MUSCLE_MAP`). Unknown exercises fall back to their muscle group.
 
 ## Charts
 - Per exercise: top set weight and estimated 1RM over time, points colored by location

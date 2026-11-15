@@ -7,12 +7,13 @@ import { classify, STARTER, GROUPS, defaultStep, effStep } from './seed.js';
 import { recommend, learnFactors, repsOf, workingSets, entryBest } from './recommend.js';
 import { convertHevy } from './hevy.js';
 import { lineChart, barChart, legend, LOC_COLORS } from './charts.js';
+import { muscleVolume, muscleFigure, shadeLegend } from './muscles.js';
 
 // ---------- state ----------
 const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], meta: {} };
 let draft = null;          // plan being built
 let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
-const APP_VERSION = 'v6';
+const APP_VERSION = 'v7';
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
 const RUN_TYPES = ['Easy', 'Tempo', 'Interval', 'Long', 'Race', 'Treadmill'];
@@ -33,6 +34,18 @@ async function load() {
     await db.putMany('exercises', S.exercises);
   }
   draft = S.meta.draft || null;
+  await migrate();
+}
+
+// One-off data fixes, each runs once per phone.
+async function migrate() {
+  const done = S.meta.migrations || [];
+  const run = async (id, fn) => { if (!done.includes(id)) { await fn(); done.push(id); } };
+  await run('goblet-single-db', async () => {
+    const g = S.exercises.find(e => e.name === 'Goblet Squat');
+    if (g && g.load !== 'single') { g.load = 'single'; await db.put('exercises', g); }
+  });
+  await db.setMeta('migrations', done); S.meta.migrations = done;
 }
 
 const save = (store, obj) => {
@@ -67,7 +80,10 @@ const sides = ex => ex.unilateral || ex.perSide;
 function fmtTarget(rec, ex) {
   if (!rec || rec.kind !== 'rec') return '';
   const w = rec.weight != null && ex.format === 'wr' ? ` @ ${fmtKg(rec.weight)} ${unitW(ex)}` : '';
-  return `${rec.sets} × ${rec.reps}${sides(ex) ? '/side' : ''}${w}`;
+  const per = rec.repsBySet || [];
+  const side = sides(ex) ? '/side' : '';
+  if (per.length > 1 && new Set(per).size > 1) return `${per.join(', ')} reps${side}${w}`;
+  return `${rec.sets} × ${rec.reps}${side}${w}`;
 }
 
 function fmtSet(s, ex) {
@@ -79,9 +95,12 @@ function fmtSet(s, ex) {
     const reps = (sides(ex) && side(s.rL, s.rR, '')) || `${s.r ?? '–'}`;
     out = ex.format === 'wr' && s.w != null ? `${fmtKg(s.w)} × ${reps}` : `${reps} reps`;
   }
-  if (s.drop && s.drop.length) out += ` <span class="muted">→ ${s.drop.map(d => `${fmtKg(d.w)}×${d.r ?? '–'}`).join(' → ')}</span>`;
+  const dropReps = d => (d.rL != null || d.rR != null ? `R${d.rR ?? '–'}/L${d.rL ?? '–'}` : `${d.r ?? '–'}`);
+  if (s.drop && s.drop.length) out += ` <span class="muted">→ ${s.drop.map(d => `${fmtKg(d.w)}×${dropReps(d)}`).join(' → ')}</span>`;
   return out;
 }
+
+const exName = ex => `<button class="exname" data-act="showHist" data-id="${ex.id}">${esc(ex.name)}</button>`;
 
 function lastText(last, ex) {
   if (!last) return 'No history yet.';
@@ -211,7 +230,7 @@ routes.plan = function plan() {
     const rec = recommend(ex, { ...ctx, position: i }, { sessions: S.sessions, runs: S.runs, learned });
     const why = ui.openWhy['p' + id];
     return `<div class="card ex">
-      <div class="exhead"><span class="num">${i + 1}</span><b>${esc(ex.name)}</b>
+      <div class="exhead"><span class="num">${i + 1}</span>${exName(ex)}
         <span class="tools"><button class="icon" data-act="mv" data-i="${i}" data-d="-1" aria-label="Move up">↑</button><button class="icon" data-act="mv" data-i="${i}" data-d="1" aria-label="Move down">↓</button><button class="icon" data-act="rmPlan" data-i="${i}" aria-label="Remove">×</button></span></div>
       ${rec.kind === 'rec' ? `<div class="target">${fmtTarget(rec, ex)}</div>
         <button class="link" data-act="why" data-k="p${id}">${why ? 'Hide' : 'Why?'}</button>
@@ -225,6 +244,7 @@ routes.plan = function plan() {
   <section class="card">
     <label>Location</label>${chips('location', LOCS.map(l => [l, l]), draft.location)}
     <label>Sleep last night (h)</label>${chips('sleep', SLEEP, draft.sleep)}
+    ${draft.location === 'Offshore' ? '<p class="muted small">Offshore: sleep is recorded, but targets follow your previous offshore sessions.</p>' : ''}
   </section>
   <section>
     <h2>Exercises <span class="muted small">${draft.exIds.length ? `${draft.exIds.length} planned` : ''}</span></h2>
@@ -235,7 +255,7 @@ routes.plan = function plan() {
     </div>
   </section>
   <div class="sticky"><button class="btn primary wide" data-act="startSession" ${ready ? '' : 'disabled'}>${draft.location ? 'Start' : 'Pick a location to start'}</button></div>
-  ${pickerHtml()}`;
+  ${pickerHtml()}${histHtml()}`;
 };
 
 function planCtx() {
@@ -245,18 +265,58 @@ function planCtx() {
 // ---------- exercise picker (modal) ----------
 function pickerHtml() {
   if (!ui.picker) return '';
-  const q = (ui.picker.q || '').toLowerCase();
-  const usage = {};
-  doneSessions().forEach(s => s.entries.forEach(e => { usage[e.exId] = (usage[e.exId] || 0) + 1; }));
+  const q = (ui.picker.q || '').toLowerCase().trim();
+  const lastUsed = {};
+  doneSessions().forEach(s => s.entries.forEach(e => { if (!lastUsed[e.exId] || lastUsed[e.exId] < s.start) lastUsed[e.exId] = s.start; }));
   const selected = new Set(ui.picker.mode === 'plan' ? draft.exIds : []);
   const list = S.exercises.filter(e => !e.archived && e.name.toLowerCase().includes(q));
-  const byKind = k => list.filter(e => e.kind === k).sort((a, b) => (usage[b.id] || 0) - (usage[a.id] || 0) || a.name.localeCompare(b.name));
-  const block = (title, arr) => (arr.length ? `<h3>${title}</h3>${arr.map(e => `<button class="pick ${selected.has(e.id) ? 'on' : ''}" data-act="pick" data-id="${e.id}"><span>${esc(e.name)}</span><span class="muted small">${e.group}${usage[e.id] ? ` · ${usage[e.id]}×` : ''}</span></button>`).join('')}` : '');
+  // Recent: the 5 most recently used exercises (only when not searching). Everything else A–Z.
+  const recent = q ? [] : list.filter(e => lastUsed[e.id]).sort((a, b) => (lastUsed[a.id] < lastUsed[b.id] ? 1 : -1)).slice(0, 5);
+  const recentIds = new Set(recent.map(e => e.id));
+  const az = arr => [...arr].sort((a, b) => a.name.localeCompare(b.name));
+  const byKind = k => az(list.filter(e => e.kind === k && !recentIds.has(e.id)));
+  const item = e => `<button class="pick ${selected.has(e.id) ? 'on' : ''}" data-act="pick" data-id="${e.id}"><span>${esc(e.name)}</span><span class="muted small">${lastUsed[e.id] ? fmtShort(lastUsed[e.id]) : e.group}</span></button>`;
+  const block = (title, arr, cls = '') => (arr.length ? `<h3 class="${cls}">${title}</h3>${arr.map(item).join('')}` : '');
   return `<div class="modal"><div class="sheet">
     <div class="sheethead"><input id="pickq" type="search" placeholder="Search exercises" value="${esc(ui.picker.q || '')}" autocomplete="off"><button class="btn small" data-act="closePicker">Done</button></div>
     <div class="sheetbody">
-      ${block('Lifts', byKind('lift'))}${block('Core', byKind('core'))}${block('Mobility', byKind('mobility'))}
+      ${recent.length ? `<div class="recent">${block('Recent', recent, 'recenth')}</div>` : ''}
+      ${block(q ? 'Lifts' : 'Lifts · A–Z', byKind('lift'))}${block('Core · A–Z', byKind('core'))}${block('Mobility · A–Z', byKind('mobility'))}
       ${q && !list.some(e => e.name.toLowerCase() === q) ? `<button class="btn ghost wide" data-act="createEx">+ Create "${esc(ui.picker.q)}"</button>` : ''}
+    </div></div></div>`;
+}
+
+// ---------- exercise history (bottom sheet) ----------
+function histHtml() {
+  if (!ui.hist) return '';
+  const ex = exById(ui.hist);
+  if (!ex) return '';
+  const rows = doneSessions()
+    .map(s => ({ s, e: s.entries.find(x => x.exId === ex.id) }))
+    .filter(x => x.e && x.e.sets.length)
+    .sort((a, b) => (a.s.start < b.s.start ? 1 : -1))
+    .slice(0, 10);
+  const pts = [...rows].reverse().map(({ s, e }) => {
+    const b = entryBest(e, ex);
+    if (!b) return null;
+    const y = ex.format === 'wr' && b.w ? +e1rm(b.w, b.r).toFixed(1) : b.r;
+    return { x: parseLocal(s.start), y, color: LOC_COLORS[s.location], label: `${fmtShort(s.start)} ${s.location}` };
+  }).filter(Boolean);
+  const list = rows.map(({ s, e }) => {
+    const b = isLift(ex) ? entryBest(e, ex) : null;
+    const est = b && ex.format === 'wr' && b.w ? `<span class="muted small">est. 1RM ${fmtKg(+e1rm(b.w, b.r).toFixed(1))}</span>` : '';
+    const rir = [...e.sets].reverse().find(x => x.rir != null);
+    return `<div class="hrow"><div class="hhead"><b>${fmtDate(s.start)}</b>${locBadge(s.location)}</div>
+      <div class="small">${e.sets.map(x => fmtSet(x, ex)).join(' · ')}</div>
+      <div class="hmeta">${est}${rir ? `<span class="muted small">${rir.rir === 3 ? '3+' : rir.rir} left</span>` : ''}</div></div>`;
+  }).join('');
+  return `<div class="modal" data-act="closeHist"><div class="sheet hist" data-act="noop">
+    <div class="sheethead"><b class="grow">${esc(ex.name)}</b><button class="btn small" data-act="closeHist">Close</button></div>
+    <div class="sheetbody">
+      ${pts.length > 1 ? lineChart([{ name: ex.name, color: 'var(--muted)', points: pts }], { yLabel: ex.format === 'wr' ? 'est. 1RM' : 'best reps', height: 140 }) + legend(LOCS.map(l => [l, LOC_COLORS[l]])) : ''}
+      <h3>Last ${rows.length} session${rows.length === 1 ? '' : 's'}</h3>
+      ${list || '<p class="muted">No history yet.</p>'}
+      <button class="btn ghost wide" data-act="histToProgress" data-id="${ex.id}">Full chart in Progress</button>
     </div></div></div>`;
 }
 
@@ -265,8 +325,7 @@ routes.workout = function workout(id) {
   const s = S.sessions.find(x => x.id === id);
   if (!s) return `<p>Session not found.</p>`;
   const editing = s.status === 'done';
-  const order = allDone(s);
-  const cards = s.entries.map((e, ei) => entryCard(s, e, ei, order)).join('');
+  const cards = s.entries.map((e, ei) => entryCard(s, e, ei)).join('');
   return `
   <header class="top"><button class="back" data-act="goto" data-h="#/">‹</button><h1>${editing ? 'Edit session' : 'Session'}</h1><span class="right">${locBadge(s.location)}</span></header>
   <p class="muted small ctxline">${fmtDate(s.start)} · ${fmtTime(s.start)}${s.sleep != null ? ` · sleep ${s.sleep >= 8 ? '8+' : s.sleep <= 4 ? '≤4' : s.sleep} h` : ''}</p>
@@ -275,16 +334,15 @@ routes.workout = function workout(id) {
   <div class="sticky row2">
     ${editing ? `<button class="btn primary wide" data-act="saveEdit" data-id="${s.id}">Save</button>` : `<button class="btn ghost" data-act="discard" data-id="${s.id}">Discard</button><button class="btn primary wide" data-act="finish" data-id="${s.id}">Finish</button>`}
   </div>
-  ${pickerHtml()}`;
+  ${pickerHtml()}${histHtml()}`;
 };
 
-// All "done" timestamps of the session in order (for rest times).
-function allDone(s) {
-  return s.entries.flatMap(e => e.sets.map(x => x.doneAt).filter(Boolean)).sort((a, b) => a - b);
-}
-function restFor(doneAt, order) {
-  const i = order.indexOf(doneAt);
-  return i > 0 ? (doneAt - order[i - 1]) / 1000 : null;
+// Rest = time since the previous finished set of the SAME exercise. Switching exercises is not rest.
+function restIn(e, si) {
+  const st = e.sets[si];
+  if (!st || !st.doneAt) return null;
+  for (let i = si - 1; i >= 0; i--) if (e.sets[i].doneAt) return st.doneAt > e.sets[i].doneAt ? (st.doneAt - e.sets[i].doneAt) / 1000 : null;
+  return null;
 }
 
 function setDefaults(s, e, si) {
@@ -294,23 +352,28 @@ function setDefaults(s, e, si) {
   const KEYS = ['w', 'r', 'rL', 'rR', 'sec', 'secL', 'secR', 'm'];
   let d = {};
   if (t && t.kind === 'rec') {
-    d = { w: t.weight, r: t.reps };
-    if (sides(ex)) { d.rL = t.reps; d.rR = t.reps; }
+    const r = t.repsBySet ? t.repsBySet[Math.min(si, t.repsBySet.length - 1)] : t.reps;
+    d = { w: t.weight, r };
+    if (sides(ex)) { d.rL = r; d.rR = r; }
   } else if (t && t.kind === 'last' && t.last) {
     const ls = t.last.sets[Math.min(si, t.last.sets.length - 1)];
     KEYS.forEach(k => { if (ls[k] != null) d[k] = ls[k]; });
   }
+  // Weight follows what was actually used on the previous set; reps keep the per-set target.
   const prev = e.sets[si - 1];
-  if (prev) KEYS.forEach(k => { if (prev[k] != null) d[k] = prev[k]; });
+  if (prev) {
+    const keep = t && t.kind === 'rec' ? ['w', 'sec', 'secL', 'secR', 'm'] : KEYS;
+    keep.forEach(k => { if (prev[k] != null) d[k] = prev[k]; });
+  }
   return d;
 }
 
-function entryCard(s, e, ei, order) {
+function entryCard(s, e, ei) {
   const ex = exById(e.exId);
   if (!ex) return '';
   const t = e.target;
   const why = ui.openWhy['w' + ei];
-  const head = `<div class="exhead"><span class="num">${ei + 1}</span><b>${esc(ex.name)}</b>
+  const head = `<div class="exhead"><span class="num">${ei + 1}</span>${exName(ex)}
     <span class="tools"><button class="icon" data-act="emv" data-i="${ei}" data-d="-1" aria-label="Move up">↑</button><button class="icon" data-act="emv" data-i="${ei}" data-d="1" aria-label="Move down">↓</button><button class="icon" data-act="erm" data-i="${ei}" aria-label="Remove">×</button></span></div>`;
   const tline = t && t.kind === 'rec'
     ? `<div class="target">Target ${fmtTarget(t, ex)} <button class="link" data-act="why" data-k="w${ei}">${why ? 'Hide' : 'Why?'}</button></div>${why ? `<ul class="why">${t.reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}`
@@ -324,8 +387,9 @@ function entryCard(s, e, ei, order) {
   const rows = e.sets.map((st, si) => {
     const d = setDefaults(s, e, si);
     const inputs = fields.map(f => `<input inputmode="decimal" data-e="${ei}" data-s="${si}" data-f="${f}" value="${st[f] ?? ''}" placeholder="${d[f] ?? ''}">`).join('');
-    const rest = st.doneAt ? restFor(st.doneAt, order) : null;
-    const drops = (st.drop || []).map((dp, di) => `<div class="setrow drop"><span class="sn">↳</span><input inputmode="decimal" data-e="${ei}" data-s="${si}" data-d="${di}" data-f="w" value="${dp.w ?? ''}" placeholder="kg"><input inputmode="decimal" data-e="${ei}" data-s="${si}" data-d="${di}" data-f="r" value="${dp.r ?? ''}" placeholder="reps"><button class="icon" data-act="rmDrop" data-e="${ei}" data-s="${si}" data-d="${di}">×</button></div>`).join('');
+    const rest = restIn(e, si);
+    const dropFields = sides(ex) ? [['w', 'kg'], ['rR', 'R reps'], ['rL', 'L reps']] : [['w', 'kg'], ['r', 'reps']];
+    const drops = (st.drop || []).map((dp, di) => `<div class="setrow drop dcols${dropFields.length}"><span class="sn">↳</span>${dropFields.map(([f, ph]) => `<input inputmode="decimal" data-e="${ei}" data-s="${si}" data-d="${di}" data-f="${f}" value="${dp[f] ?? ''}" placeholder="${ph}">`).join('')}<button class="icon" data-act="rmDrop" data-e="${ei}" data-s="${si}" data-d="${di}">×</button></div>`).join('');
     return `<div class="setrow cols${fields.length}"><span class="sn">${si + 1}</span>${inputs}<button class="done ${st.doneAt ? 'on' : ''}" data-act="done" data-e="${ei}" data-s="${si}" aria-label="Set done">✓</button></div>
       ${drops}
       <div class="setmeta">${rest != null ? `<span class="muted small">rest ${fmtDur(rest)}</span>` : '<span></span>'}
@@ -346,7 +410,6 @@ function entryCard(s, e, ei, order) {
 routes.session = function session(id) {
   const s = S.sessions.find(x => x.id === id);
   if (!s) return `<p>Session not found.</p>`;
-  const order = allDone(s);
   const dur = s.end ? (parseLocal(s.end) - parseLocal(s.start)) / 1000 : null;
   const body = s.entries.map(e => {
     const ex = exById(e.exId);
@@ -355,11 +418,12 @@ routes.session = function session(id) {
     let verdict = '';
     if (t && t.kind === 'rec' && isLift(ex)) {
       const ws = workingSets(e, ex);
-      const hit = ws.filter(x => (x.w || 0) >= (t.weight || 0) && repsOf(x, ex) >= t.reps).length;
+      const per = t.repsBySet || [];
+      const hit = ws.filter((x, i) => (x.w || 0) >= (t.weight || 0) && repsOf(x, ex) >= (per[Math.min(i, per.length - 1)] ?? t.reps)).length;
       verdict = `<div class="verdict ${hit >= t.sets ? 'good' : hit ? 'mid' : 'bad'}">Target ${fmtTarget(t, ex)} · ${hit}/${t.sets} sets hit</div>`;
     }
-    return `<div class="card ex"><div class="exhead"><b>${esc(ex.name)}</b></div>${verdict}
-      <ol class="sets">${e.sets.map(x => `<li>${fmtSet(x, ex)}${x.rir != null ? ` <span class="muted small">· ${x.rir === 3 ? '3+' : x.rir} left</span>` : ''}${x.rpe != null ? ` <span class="muted small">· RPE ${x.rpe}</span>` : ''}${x.doneAt && restFor(x.doneAt, order) != null ? ` <span class="muted small">· rest ${fmtDur(restFor(x.doneAt, order))}</span>` : ''}</li>`).join('')}</ol>
+    return `<div class="card ex"><div class="exhead">${exName(ex)}</div>${verdict}
+      <ol class="sets">${e.sets.map((x, i) => `<li>${fmtSet(x, ex)}${x.rir != null ? ` <span class="muted small">· ${x.rir === 3 ? '3+' : x.rir} left</span>` : ''}${x.rpe != null ? ` <span class="muted small">· RPE ${x.rpe}</span>` : ''}${restIn(e, i) != null ? ` <span class="muted small">· rest ${fmtDur(restIn(e, i))}</span>` : ''}</li>`).join('')}</ol>
       ${e.note ? `<p class="note">${esc(e.note)}</p>` : ''}</div>`;
   }).join('');
   return `
@@ -368,9 +432,23 @@ routes.session = function session(id) {
     <label>Location</label>${chips(`sloc:${s.id}`, LOCS.map(l => [l, l]), s.location)}
     <p class="muted small">${fmtTime(s.start)}${dur ? ` · ${fmtDur(dur)}` : ''}${s.sleep != null ? ` · sleep ${s.sleep >= 8 ? '8+' : s.sleep} h` : ''}${s.source === 'hevy' ? ' · imported from Hevy' : ''}</p>
   </section>
+  ${musclesCard([s], 'Muscles worked', [1, 2, 3], 'sets this session')}
   ${body}
-  <div class="actions"><button class="btn" data-act="goto" data-h="#/workout/${s.id}">Edit sets</button><button class="btn danger" data-act="delSession" data-id="${s.id}">Delete</button></div>`;
+  <div class="actions"><button class="btn" data-act="goto" data-h="#/workout/${s.id}">Edit sets</button><button class="btn danger" data-act="delSession" data-id="${s.id}">Delete</button></div>
+  ${histHtml()}`;
 };
+
+// ---------- muscle map card ----------
+const countSets = (e, ex) => workingSets(e, ex).length;
+function musclesCard(sessions, title, thresholds, unit, extra = '') {
+  const vol = muscleVolume(sessions, exById, countSets);
+  const total = Object.values(vol).reduce((a, b) => a + b, 0);
+  const view = ui.mview || 'front';
+  return `<section class="card"><h3>${title}</h3>${extra}
+    ${chips('mview', [['front', 'Front'], ['back', 'Back']], view)}
+    ${total ? muscleFigure(vol, view, thresholds) + shadeLegend(thresholds, unit) : '<p class="muted small">No lifting sets yet.</p>'}
+  </section>`;
+}
 
 // ---------- HISTORY ----------
 routes.history = function history() {
@@ -473,7 +551,12 @@ routes.progress = function progress() {
   const paces = S.runs.filter(r => r.distKm > 0 && r.durSec > 0 && r.type !== 'Interval').map(r => ({ x: parseLocal(r.date), y: r.durSec / r.distKm, color: r.type === 'Race' ? 'var(--off)' : r.type === 'Treadmill' ? 'var(--gym)' : 'var(--home)', label: `${fmtShort(r.date)} ${r.type} ${r.distKm} km ${fmtPace(r.durSec, r.distKm)}` }));
   const bw = [...S.bodyweight].sort((a, b) => (a.date < b.date ? -1 : 1)).map(b => ({ x: parseLocal(b.date), y: b.kg, label: `${fmtShort(b.date)}: ${b.kg} kg` }));
 
+  const wkOff = ui.mweek || 0;
+  const wkStart = lastWeeks(wkOff + 1)[0];
+  const wkSessions = doneSessions().filter(s => weekKey(s.start) === wkStart);
+  const muscleBlock = musclesCard(wkSessions, 'Muscles this week', [3, 6, 9], 'sets', chips('mweek', [[0, 'This week'], [1, 'Last week']], wkOff) + `<p class="muted small">Week of ${fmtShort(wkStart)} · ${wkSessions.length} session${wkSessions.length === 1 ? '' : 's'}</p>`);
   return `<header class="top"><h1>Progress</h1></header>
+  ${muscleBlock}
   <section class="card">
     <label>Exercise</label>
     <select id="progEx">${lifts.map(e => `<option value="${e.id}" ${e.id === ui.progEx ? 'selected' : ''}>${esc(e.name)} (${usage[e.id]})</option>`).join('')}</select>
@@ -492,7 +575,8 @@ routes.progress = function progress() {
   </section>
   <section class="card"><h3>Body weight</h3>
     ${lineChart([{ name: 'kg', color: 'var(--accent)', points: bw }], { yLabel: 'kg' })}
-  </section>`;
+  </section>
+  ${histHtml()}`;
 };
 routes.progress.tab = 'progress';
 routes.progress.after = () => {
@@ -683,6 +767,8 @@ const actions = {
       saveDraft();
     } else if (name === 'histFilter') ui.histFilter = v;
     else if (name === 'progMetric') ui.progMetric = v;
+    else if (name === 'mview') ui.mview = v;
+    else if (name === 'mweek') ui.mweek = +v;
     else if (name.startsWith('rir:')) {
       const s = S.sessions.find(x => x.id === current.args[0]);
       const e = s.entries[+name.split(':')[1]];
@@ -706,6 +792,10 @@ const actions = {
     }
     rerender();
   },
+  showHist: el => { ui.hist = el.dataset.id; rerender(); },
+  closeHist: () => { ui.hist = null; rerender(); },
+  noop: () => {},
+  histToProgress: el => { ui.progEx = el.dataset.id; ui.hist = null; go('#/progress'); },
   why: el => { ui.openWhy[el.dataset.k] = !ui.openWhy[el.dataset.k]; rerender(); },
   mv: el => {
     const i = +el.dataset.i, j = i + +el.dataset.d;
@@ -751,7 +841,7 @@ const actions = {
   },
   addSet: el => withEntry(el, (s, e) => { e.sets.push({ drop: [] }); }),
   rmSet: el => withEntry(el, (s, e) => { e.sets.splice(+el.dataset.s, 1); }),
-  addDrop: el => withEntry(el, (s, e) => { const st = e.sets[+el.dataset.s]; (st.drop = st.drop || []).push({ w: null, r: null }); }),
+  addDrop: el => withEntry(el, (s, e) => { const st = e.sets[+el.dataset.s]; (st.drop = st.drop || []).push(sides(exById(e.exId)) ? { w: null, rR: null, rL: null } : { w: null, r: null }); }),
   rmDrop: el => withEntry(el, (s, e) => { e.sets[+el.dataset.s].drop.splice(+el.dataset.d, 1); }),
   done: el => withEntry(el, (s, e) => {
     const si = +el.dataset.s, st = e.sets[si];
@@ -810,14 +900,13 @@ const actions = {
   exportCsv: () => {
     const rows = [];
     for (const s of [...doneSessions()].sort((a, b) => (a.start < b.start ? -1 : 1))) {
-      const order = allDone(s);
       s.entries.forEach(e => {
         const ex = exById(e.exId);
         if (!ex) return;
         e.sets.forEach((st, i) => {
           const base = { date: s.start.slice(0, 10), time: s.start.slice(11), location: s.location, sleep_h: s.sleep ?? '', work_h: s.location === 'Offshore' ? 12 : 0, exercise: ex.name, kind: ex.kind, group: ex.group, load: ex.load, order: e.order + 1, set: i + 1 };
-          rows.push({ ...base, drop: 0, weight_kg: st.w ?? '', reps: st.r ?? '', reps_right: st.rR ?? '', reps_left: st.rL ?? '', sec: st.sec ?? st.secR ?? '', sec_left: st.secL ?? '', metres: st.m ?? '', reps_in_tank: st.rir ?? '', rpe: st.rpe ?? '', rest_sec: st.doneAt && restFor(st.doneAt, order) != null ? Math.round(restFor(st.doneAt, order)) : '', note: e.note || '' });
-          (st.drop || []).forEach(d => rows.push({ ...base, drop: 1, weight_kg: d.w ?? '', reps: d.r ?? '', reps_right: '', reps_left: '', sec: '', sec_left: '', metres: '', reps_in_tank: '', rpe: '', rest_sec: '', note: '' }));
+          rows.push({ ...base, drop: 0, weight_kg: st.w ?? '', reps: st.r ?? '', reps_right: st.rR ?? '', reps_left: st.rL ?? '', sec: st.sec ?? st.secR ?? '', sec_left: st.secL ?? '', metres: st.m ?? '', reps_in_tank: st.rir ?? '', rpe: st.rpe ?? '', rest_sec: restIn(e, i) != null ? Math.round(restIn(e, i)) : '', note: e.note || '' });
+          (st.drop || []).forEach(d => rows.push({ ...base, drop: 1, weight_kg: d.w ?? '', reps: d.r ?? '', reps_right: d.rR ?? '', reps_left: d.rL ?? '', sec: '', sec_left: '', metres: '', reps_in_tank: '', rpe: '', rest_sec: '', note: '' }));
         });
       });
     }
@@ -867,7 +956,7 @@ function addEntry(s, exId) {
 // Drop empty sets (never ticked and no values) and empty exercises.
 function cleanSession(s) {
   const has = st => st.doneAt || ['w', 'r', 'rL', 'rR', 'sec', 'secL', 'secR', 'm'].some(k => st[k] != null);
-  s.entries.forEach(e => { e.sets = e.sets.filter(has); e.sets.forEach(st => { st.drop = (st.drop || []).filter(d => d.w != null || d.r != null); }); });
+  s.entries.forEach(e => { e.sets = e.sets.filter(has); e.sets.forEach(st => { st.drop = (st.drop || []).filter(d => ['w', 'r', 'rL', 'rR'].some(k => d[k] != null)); }); });
   s.entries = s.entries.filter(e => e.sets.length);
   s.entries.forEach((e, k) => { e.order = k; });
 }

@@ -93,9 +93,18 @@ Behaves like a normal Android app:
 - Back closes an open sheet (exercise picker, exercise history) before leaving the page.
 - After Finish or saving a new run, Back does not return to the finished screen.
 - There is no "Close app" button (not an Android convention).
+- Home and tabs opened from the bottom menu start at the top. A page reached with Back (e.g. the History list after opening a session) returns to where it was.
+
+## Versions
+Shown at the bottom of More. v2.0 = first full release after the initial build (v1–v9). Small updates: v2.1, v2.2…; a big redesign: v3.0.
+
+## Tests
+`node tests/run.mjs` before every pull request (see `tests/README.md`). Fake data only.
 
 ## Data
-- Export: full JSON backup + CSV for Excel (two files: sets, runs).
+- **Share backup**: one tap opens the Android share sheet (Gmail, Drive, WhatsApp) so the file leaves the phone. Falls back to saving in Downloads where sharing is not available. **Save to phone** keeps the plain download.
+- **Restore** first shows what is in the file (date, sessions, runs, body weight) next to what is on the phone, then asks before replacing everything.
+- Export for Excel: CSV (two files: sets, runs).
 - Backup reminder: a small dot on the **More** tab after 7 days without a backup. No warning text on the home screen.
 - Import: JSON backup (restore), Hevy CSV.
 

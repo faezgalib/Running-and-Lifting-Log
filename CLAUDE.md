@@ -11,7 +11,9 @@ Read `SPEC.md` first. It holds every product decision made so far. Keep it updat
 - Keep the home screen positive. Safety features (backup reminder, export/restore, persistence) must not be removed.
 
 ## Release checklist
-1. Bump `VERSION` in `sw.js` and `APP_VERSION` in `js/app.js`.
-2. Test in Playwright (Chromium is preinstalled): import a Hevy CSV, plan → log → finish a session, log a run, open Progress, export/restore a backup, reload offline. No console errors.
+1. Version: bump `APP_VERSION` in `js/app.js` and `VERSION` in `sw.js` together (`v2.1` ↔ `lrj-2.1`).
+   Small updates bump the minor (v2.1, v2.2…); a big redesign bumps the major (v3.0).
+2. Run `node tests/run.mjs` — all checks must pass. Add a check for every new feature or fixed bug.
+   Tests use fake data only (`tests/fixtures.mjs`); never add real training data to the repo.
 3. Update `SPEC.md` if behaviour changed.
 4. Open a pull request with a short summary in plain language; the owner merges it on GitHub.

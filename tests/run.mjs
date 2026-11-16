@@ -1,0 +1,238 @@
+// Release tests for Lift Run Journey. Run before every pull request:  node tests/run.mjs
+// Needs Node 18+ and Playwright with Chromium (see tests/README.md). Uses only fake data (tests/fixtures.mjs).
+import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { sampleHevyCsv, OFFSHORE_PERIOD } from './fixtures.mjs';
+import { recommend, workingSets } from '../js/recommend.js';
+import { classify } from '../js/seed.js';
+import { parseDur, fmtDur } from '../js/util.js';
+import { muscleVolume } from '../js/muscles.js';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const require = createRequire(import.meta.url);
+function loadPlaywright() {
+  try { return require('playwright'); } catch { /* fall back to a global install */ }
+  const g = execSync('npm root -g').toString().trim();
+  return require(path.join(g, 'playwright'));
+}
+
+// ---------- tiny test harness ----------
+let failed = 0, passed = 0;
+const check = (name, ok, detail = '') => {
+  if (ok) { passed++; console.log(`  ✓ ${name}`); } else { failed++; console.log(`  ✗ ${name}${detail ? ` — ${detail}` : ''}`); }
+};
+const section = t => console.log(`\n${t}`);
+
+// ---------- 1. logic (no browser) ----------
+function unitTests() {
+  section('Recommendations');
+  const ex = n => classify(n);
+  const sess = (e, sets, loc = 'Offshore', sleep = null) => ({ id: 's' + Math.random(), start: '2026-11-15T06:40', location: loc, sleep, status: 'done', entries: [{ exId: e.id, order: 0, sets }] });
+  const ctx = (loc, sleep = null, position = 0) => ({ location: loc, sleep, start: '2026-11-18T06:40', position });
+  const bench = ex('Bench Press (Dumbbell)');
+  let r = recommend(bench, ctx('Offshore'), { sessions: [sess(bench, [{ w: 16, r: 12 }, { w: 16, r: 10, rir: 1 }])] });
+  check('per-set targets: 12,10 RIR1 → 12,11 @16', r.weight === 16 && r.repsBySet.join() === '12,11', JSON.stringify(r.repsBySet));
+  r = recommend(bench, ctx('Offshore'), { sessions: [sess(bench, [{ w: 16, r: 9 }, { w: 16, r: 8, rir: 3 }])] });
+  check('RIR 3+ → +2 reps', r.repsBySet.join() === '11,10', JSON.stringify(r.repsBySet));
+  r = recommend(bench, ctx('Offshore'), { sessions: [sess(bench, [{ w: 16, r: 7 }, { w: 16, r: 6, rir: 0 }])] });
+  check('failure below range → drop weight', r.weight === 14.5, String(r.weight));
+  const gob = ex('Goblet Squat');
+  r = recommend(gob, ctx('Offshore'), { sessions: [sess(gob, [{ w: 20, r: 11 }, { w: 20, r: 11, rir: 3 }])] });
+  check('goblet squat is per dumbbell, RIR 3+ near top → +1.5 kg', gob.load === 'single' && r.weight === 21.5, `${gob.load} ${r.weight}`);
+  const cc = ex('Concentration Curl');
+  r = recommend(cc, ctx('Offshore'), { sessions: [sess(cc, [{ w: 13.5, rR: 9, rL: 8 }, { w: 13.5, rR: 10, rL: 8, rir: 0 }])] });
+  check('unilateral uses weaker side, RIR 0 → hold', r.weight === 13.5 && r.repsBySet.join() === '8,8', JSON.stringify(r.repsBySet));
+  r = recommend(bench, ctx('Offshore', 4), { sessions: [sess(bench, [{ w: 16, r: 12 }, { w: 16, r: 10, rir: 1 }], 'Offshore', 7)] });
+  check('offshore: sleep is ignored', r.repsBySet.join() === '12,11', JSON.stringify(r.repsBySet));
+  r = recommend(bench, ctx('Home', 4), { sessions: [sess(bench, [{ w: 16, r: 12 }, { w: 16, r: 10, rir: 1 }], 'Home', 7)] });
+  check('home: low sleep → −1 rep', r.repsBySet.join() === '11,10', JSON.stringify(r.repsBySet));
+  r = recommend(bench, ctx('Offshore', null, 4), { sessions: [sess(bench, [{ w: 16, r: 12 }, { w: 16, r: 10, rir: 1 }])] });
+  check('later in the session than usual → −1 rep', r.repsBySet.join() === '11,10', JSON.stringify(r.repsBySet));
+
+  section('Duration typing');
+  const cases = { '003000': '30:00', '3000': '30:00', '4530': '45:30', '13000': '1:30:00', '45': '45:00', '45:30': '45:30', '1:30:00': '1:30:00' };
+  for (const [inp, want] of Object.entries(cases)) check(`"${inp}" → ${want}`, fmtDur(parseDur(inp)) === want, fmtDur(parseDur(inp)));
+  check('invalid "4:75" → rejected', parseDur('4:75') === null);
+
+  section('Muscle volume');
+  const byId = { [bench.id]: bench, [cc.id]: cc };
+  const vol = muscleVolume([{ entries: [{ exId: bench.id, sets: [{ w: 16, r: 10 }, { w: 16, r: 9 }] }, { exId: cc.id, sets: [{ w: 12, rR: 9, rL: 8 }] }] }], id => byId[id], (e, x) => workingSets(e, x).length);
+  check('bench 2 sets → chest 2, triceps 1, front delts 1', vol.chest === 2 && vol.triceps === 1 && vol.fdelt === 1, JSON.stringify(vol));
+  check('curl 1 set → biceps 1, forearms ¼', vol.biceps === 1 && vol.forearms === 0.25, JSON.stringify(vol));
+}
+
+// ---------- 2. app in a real browser ----------
+function startServer() {
+  const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png' };
+  const srv = http.createServer((req, res) => {
+    let p = decodeURIComponent(req.url.split('?')[0]);
+    if (p.endsWith('/')) p += 'index.html';
+    const f = path.join(ROOT, p);
+    if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' });
+    fs.createReadStream(f).pipe(res);
+  });
+  return new Promise(r => srv.listen(0, '127.0.0.1', () => r(srv)));
+}
+
+async function browserTests() {
+  const { chromium } = loadPlaywright();
+  const srv = await startServer();
+  const URL = `http://127.0.0.1:${srv.address().port}/`;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lrj-test-'));
+  const csvPath = path.join(tmp, 'hevy.csv');
+  fs.writeFileSync(csvPath, sampleHevyCsv());
+  const browser = await chromium.launch();
+  const ctx = await browser.newContext({ viewport: { width: 400, height: 860 }, acceptDownloads: true });
+  const p = await ctx.newPage();
+  const errors = [];
+  p.on('pageerror', e => errors.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  const dialogs = [];
+  p.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
+  const where = async () => { await p.waitForTimeout(250); const u = p.url(); return u.startsWith(URL) ? '#' + (u.split('#')[1] || '/') : 'LEFT APP'; };
+  const back = async () => { await p.goBack().catch(() => {}); return where(); };
+  const tab = name => p.click(`.tabbar a:has-text("${name}")`);
+
+  try {
+    await p.goto('about:blank');
+    await p.goto(URL); await p.waitForSelector('.hero');
+
+    section('Import from Hevy (fake data)');
+    await tab('More'); await p.click('a[href="#/import"]');
+    await p.fill('#periods', OFFSHORE_PERIOD);
+    await p.setInputFiles('#hevyFile', csvPath);
+    await p.waitForSelector('text=Preview');
+    const prev = await p.locator('section.card').nth(1).innerText();
+    check('preview shows sessions, runs and an Offshore count', /30\s*sessions/.test(prev) && /Offshore [1-9]/.test(prev) && /\d+\s*runs/.test(prev), prev.replace(/\n/g, ' '));
+    check('left/right taken from "Kiri beda" notes', /Left\/right sets from notes: [1-9]/.test(prev));
+    await p.click('button[data-act=doImport]');
+    check('import lands on History', await where() === '#/history');
+
+    section('Plan and log a session');
+    await tab('Home'); await p.click('text=Start session');
+    await p.click('button.chip:has-text("Offshore")');
+    check('offshore note about sleep', await p.locator('text=sleep is recorded').count() === 1);
+    await p.click('text=+ Add exercise');
+    const heads = await p.locator('.sheetbody h3').allInnerTexts();
+    check('picker shows Recent then A–Z', /RECENT/i.test(heads[0] || '') && heads.some(h => /A–Z/.test(h)), heads.join('|'));
+    // names listed under the "Lifts · A–Z" heading only (stop at the next heading)
+    const az = await p.evaluate(() => {
+      const out = []; let on = false;
+      for (const el of document.querySelector('.sheetbody').children) {
+        if (el.tagName === 'H3') { on = /^Lifts/i.test(el.textContent); continue; }
+        if (on && el.classList.contains('pick')) out.push(el.querySelector('span').textContent);
+      }
+      return out;
+    });
+    check('lifts are sorted A–Z', JSON.stringify(az) === JSON.stringify([...az].sort((a, b) => a.localeCompare(b))));
+    check('Back closes the picker', await back() === '#/plan' && await p.locator('.modal').count() === 0);
+    await p.click('text=+ Add exercise');
+    for (const n of ['Bench Press (Dumbbell)', 'Concentration Curl']) await p.locator('.pick', { hasText: n }).first().click();
+    await p.click('button[data-act=closePicker]');
+    const targets = await p.locator('.target').allInnerTexts();
+    check('targets shown for planned exercises', targets.length === 2 && targets.every(t => /kg/.test(t)), targets.join(' | '));
+    await p.click('button:has-text("Start")');
+    const bench = p.locator('.ex').nth(0), curl = p.locator('.ex').nth(1);
+    await bench.locator('button.done').nth(0).click(); await p.waitForTimeout(1100);
+    await bench.locator('button.done').nth(1).click();
+    await bench.locator('button.chip:has-text("1")').click();
+    await curl.locator('button.done').nth(0).click();
+    await curl.locator('button[data-act=addDrop]').first().click();
+    const dropInputs = curl.locator('.setrow.drop input');
+    check('drop set on a unilateral exercise has kg, R and L', await dropInputs.count() === 3);
+    await dropInputs.nth(0).fill('8'); await dropInputs.nth(1).fill('6'); await dropInputs.nth(2).fill('5');
+    const rests = await p.locator('.setmeta .muted').allInnerTexts();
+    check('rest only between sets of the same exercise', rests.length === 1, rests.join(','));
+    check('Back from a session goes Home with a Resume card', await back() === '#/' && await p.locator('.card.resume').count() === 1);
+    await p.click('.card.resume'); await p.click('button:has-text("Finish")');
+    await p.waitForSelector('.musclemap');
+    check('summary shows the muscle map without numbers', !/\bsets?\b/.test(await p.locator('.musclemap').textContent()));
+    check('summary keeps the drop set (R/L)', (await p.locator('main').innerText()).includes('8×R6/L5'));
+    check('Back after Finish goes Home (not to the finished session)', await back() === '#/');
+
+    section('Exercise history and Progress');
+    await tab('History'); await p.locator('.list a.row[href^="#/session"]').first().click();
+    await p.locator('.exname').first().click();
+    check('exercise history shows sessions with location', await p.locator('.hrow .badge').count() > 0);
+    check('Back closes the history panel', (await back()).startsWith('#/session') && await p.locator('.modal').count() === 0);
+    await tab('Progress');
+    check('Progress tabs are Lifting | Running', (await p.locator('.tabs button').allInnerTexts()).join('|') === 'Lifting|Running');
+    check('Exercise progress comes before Weekly overview', /Exercise progress[\s\S]*Weekly overview/i.test((await p.locator('h2.sect').allInnerTexts()).join(' ')));
+    await p.click('.selectbtn'); await p.fill('#pickq', 'goblet');
+    const found = await p.locator('.pick span:first-child').allInnerTexts();
+    check('exercise search filters the A–Z list', found.length === 1 && found[0] === 'Goblet Squat', found.join(','));
+    await p.locator('.pick').first().click();
+    check('chosen exercise shown', (await p.locator('.selectbtn').innerText()).includes('Goblet Squat'));
+    await p.click('.tabs button:has-text("Running")');
+    check('pace chart marked "faster ↑"', await p.locator('text=faster ↑').count() === 1);
+    const pts = await p.locator('section.card:has(h3:text("Pace")) circle').evaluateAll(cs => cs.map(c => ({ y: +c.getAttribute('cy'), t: c.textContent })));
+    const pace = t => { const m = /(\d+):(\d+)\/km/.exec(t); return m ? +m[1] * 60 + +m[2] : 0; };
+    const fastest = [...pts].sort((a, b) => pace(a.t) - pace(b.t))[0], highest = [...pts].sort((a, b) => a.y - b.y)[0];
+    check('fastest run is plotted highest', fastest && highest && fastest.t === highest.t, `${fastest?.t} vs ${highest?.t}`);
+
+    section('Run, body weight, navigation');
+    await tab('Home'); await p.click('text=Log run');
+    await p.fill('[data-run=distKm]', '4'); await p.fill('[data-run=durSec]', '3000');
+    check('"3000" on the number pad → pace 7:30/km', (await p.locator('#pace').innerText()) === '7:30/km');
+    await p.click('button:has-text("Save")');
+    check('saved run → History, Back → Home', await where() === '#/history' && await back() === '#/');
+    await tab('More'); await p.click('a[href="#/body"]');
+    await p.fill('#bwKg', '72'); await p.click('button:has-text("+ Add weight")'); await p.waitForTimeout(200);
+    check('body weight page has a chart and the entry', await p.locator('.chart').count() === 1 && (await p.locator('main').innerText()).includes('72 kg'));
+    check('Back: Body weight → More → Home', await back() === '#/more' && await back() === '#/');
+    await p.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); await p.waitForTimeout(100);
+    await tab('Progress'); await tab('Home');
+    check('Home opens at the top after switching tabs', await p.evaluate(() => window.scrollY) === 0);
+    await tab('History');
+    const row = p.locator('.list a.row[href^="#/session"]').nth(8);
+    await row.scrollIntoViewIfNeeded(); await p.evaluate(() => window.scrollBy(0, 200)); await p.waitForTimeout(100);
+    const y0 = await p.evaluate(() => window.scrollY);
+    await row.click({ force: true }); await back(); await p.waitForTimeout(150);
+    check('Back to History keeps the scroll position', Math.abs(await p.evaluate(() => window.scrollY) - y0) < 5, `${y0} vs ${await p.evaluate(() => window.scrollY)}`);
+    await tab('Home');
+    check('Back on Home leaves the app', await back() === 'LEFT APP');
+    await p.goForward(); await p.waitForSelector('.hero');
+
+    section('Backup and restore');
+    await tab('More');
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.click('button[data-act=shareBackup]')]);
+    const backupPath = path.join(tmp, 'backup.json'); await dl.saveAs(backupPath);
+    const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+    await p.waitForTimeout(400);
+    check('Share backup (no share sheet in tests) saves a full backup', backup.app === 'lift-run-journey' && backup.data.sessions.length > 0);
+    check('last backup date recorded (no reminder dot)', await p.locator('.tabbar .dot').count() === 0);
+    const p2 = await ctx.newPage();
+    const dialogs2 = []; p2.on('dialog', d => { dialogs2.push(d.message()); d.accept(); });
+    await p2.goto(URL + '#/more'); await p2.waitForSelector('#restoreFile');
+    await p2.setInputFiles('#restoreFile', backupPath); await p2.waitForTimeout(1200);
+    check('restore shows what is in the file before replacing', /Backup from[\s\S]*sessions[\s\S]*On this phone now/.test(dialogs2[0] || ''), (dialogs2[0] || '').replace(/\n/g, ' '));
+    await p2.close();
+
+    section('Offline and version');
+    await p.goto(URL); await p.waitForTimeout(1500);
+    await ctx.setOffline(true);
+    await p.reload(); await p.waitForSelector('.hero', { timeout: 5000 }).catch(() => {});
+    check('app opens offline', await p.locator('.hero').count() === 1);
+    await ctx.setOffline(false);
+    await tab('More');
+    const ver = ((await p.locator('main').innerText()).match(/v\d+\.\d+/) || [''])[0];
+    const swv = /VERSION = 'lrj-([\d.]+)'/.exec(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'))?.[1];
+    check(`version shown (${ver}) matches sw.js (${swv})`, ver === `v${swv}`);
+    check('no console errors', errors.length === 0, errors.join(' | '));
+  } finally {
+    await browser.close();
+    srv.close();
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+unitTests();
+await browserTests();
+console.log(`\n${passed} passed, ${failed} failed`);
+process.exit(failed ? 1 : 0);

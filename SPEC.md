@@ -102,7 +102,7 @@ Shown at the bottom of More. v2.0 = first full release after the initial build (
 `node tests/run.mjs` before every pull request (see `tests/README.md`). Fake data only.
 
 ## Data
-- **Share backup**: one tap opens the Android share sheet (Gmail, Drive, WhatsApp) so the file leaves the phone. Falls back to saving in Downloads where sharing is not available. **Save to phone** keeps the plain download.
+- **Share backup**: one tap opens the Android share sheet (Gmail, Drive, WhatsApp) so the file leaves the phone. The shared file ends in `.txt` (Android only shares certain file types; the content is the same JSON). Falls back to saving in Downloads where sharing is not available. Restore accepts `.json` and `.txt`. **Save to phone** keeps the plain download.
 - **Restore** first shows what is in the file (date, sessions, runs, body weight) next to what is on the phone, then asks before replacing everything.
 - Export for Excel: CSV (two files: sets, runs).
 - Backup reminder: a small dot on the **More** tab after 7 days without a backup. No warning text on the home screen.

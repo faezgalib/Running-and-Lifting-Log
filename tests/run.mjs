@@ -212,6 +212,12 @@ async function browserTests() {
     await p2.goto(URL + '#/more'); await p2.waitForSelector('#restoreFile');
     await p2.setInputFiles('#restoreFile', backupPath); await p2.waitForTimeout(1200);
     check('restore shows what is in the file before replacing', /Backup from[\s\S]*sessions[\s\S]*On this phone now/.test(dialogs2[0] || ''), (dialogs2[0] || '').replace(/\n/g, ' '));
+    // The share sheet sends the backup as .txt (Android allows plain text); Restore must accept it.
+    const txtPath = path.join(tmp, 'backup.txt'); fs.copyFileSync(backupPath, txtPath);
+    dialogs2.length = 0;
+    await p2.setInputFiles('#restoreFile', txtPath); await p2.waitForTimeout(1200);
+    check('restore accepts the shared .txt backup', /Backup from/.test(dialogs2[0] || '') && (await p2.locator('.toast').allInnerTexts()).some(x => /restored/i.test(x)));
+    check('share uses a plain-text file (allowed by Android)', /name\.replace\(\/\\\.json\$\/, '\.txt'\)/.test(fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8')) && /type: 'text\/plain'/.test(fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8')));
     await p2.close();
 
     section('Offline and version');

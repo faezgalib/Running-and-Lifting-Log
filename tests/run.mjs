@@ -103,6 +103,10 @@ async function browserTests() {
     await p.goto('about:blank');
     await p.goto(URL); await p.waitForSelector('.hero');
 
+    section('Home');
+    check('logo is the largest element at the top', await p.evaluate(() => { const i = document.querySelector('.hero img'); return i && i.getBoundingClientRect().width >= 96; }));
+    check('daily line shown', (await p.locator('.poster .q').innerText()).length > 5);
+
     section('Import from Hevy (fake data)');
     await tab('More'); await p.click('a[href="#/import"]');
     await p.fill('#periods', OFFSHORE_PERIOD);
@@ -113,6 +117,13 @@ async function browserTests() {
     check('left/right taken from "Kiri beda" notes', /Left\/right sets from notes: [1-9]/.test(prev));
     await p.click('button[data-act=doImport]');
     check('import lands on History', await where() === '#/history');
+
+    await tab('Home');
+    const recentRows = await p.locator('.recent-home .rr').count();
+    check('Home Recent shows at most 5 short rows', recentRows > 0 && recentRows <= 5, String(recentRows));
+    check('Recent rows are one-line summaries', /exercises? · \d+ sets?|km · /.test(await p.locator('.recent-home').innerText()));
+    await p.click('.hh a:has-text("See all")');
+    check('"See all" opens History', await where() === '#/history');
 
     section('Plan and log a session');
     await tab('Home'); await p.click('text=Start session');

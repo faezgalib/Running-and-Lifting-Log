@@ -117,9 +117,12 @@ Shown at the bottom of More. v2.0 = first full release after the initial build (
 - Weights are imported exactly as recorded (some exercises are a total of 2 dumbbells).
 
 ## Home screen
-- Logo, app name, greeting by time of day.
-- One positive line per day (rotating list). Sundays always show "No human is limited. — Eliud Kipchoge".
-- Last-30-days summary (sessions, runs, km), next race countdown, quick actions, recent activity.
+Design option A ("Poster"), Android system font, same colours as the rest of the app:
+- **Logo** (large, centred) with LIFT RUN JOURNEY underneath — the most prominent element.
+- **Daily line** second: thin type, centred, with the author in small green capitals. Sundays always show "No human is limited. — Eliud Kipchoge".
+- Greeting by time of day and a last-30-days line (sessions and km).
+- Resume card (session in progress) and next race countdown when they apply.
+- Start session / Log run, This week (sessions, working sets, km), and **Recent**: at most 5 rows, date on the left, one short line each ("6 exercises · 14 sets" / "4 km · 7:30/km"), location as a coloured dot, "See all" → History.
 - Tone: positive. No warnings or negative messages on the home screen.
 
 ## Updates and data use

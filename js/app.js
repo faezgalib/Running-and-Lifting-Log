@@ -13,7 +13,7 @@ import { muscleVolume, muscleFigure, shadeLegend } from './muscles.js';
 const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], meta: {} };
 let draft = null;          // plan being built
 let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
-const APP_VERSION = 'v7';
+const APP_VERSION = 'v8';
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
 const RUN_TYPES = ['Easy', 'Tempo', 'Interval', 'Long', 'Race', 'Treadmill'];
@@ -266,23 +266,24 @@ function planCtx() {
 function pickerHtml() {
   if (!ui.picker) return '';
   const q = (ui.picker.q || '').toLowerCase().trim();
-  const lastUsed = {};
-  doneSessions().forEach(s => s.entries.forEach(e => { if (!lastUsed[e.exId] || lastUsed[e.exId] < s.start) lastUsed[e.exId] = s.start; }));
+  const lastUsed = {}, counts = {};
+  doneSessions().forEach(s => s.entries.forEach(e => { counts[e.exId] = (counts[e.exId] || 0) + 1; if (!lastUsed[e.exId] || lastUsed[e.exId] < s.start) lastUsed[e.exId] = s.start; }));
   const selected = new Set(ui.picker.mode === 'plan' ? draft.exIds : []);
-  const list = S.exercises.filter(e => !e.archived && e.name.toLowerCase().includes(q));
+  const prog = ui.picker.mode === 'progress';
+  const list = S.exercises.filter(e => (prog ? e.kind !== 'mobility' && lastUsed[e.id] : !e.archived) && e.name.toLowerCase().includes(q));
   // Recent: the 5 most recently used exercises (only when not searching). Everything else A–Z.
-  const recent = q ? [] : list.filter(e => lastUsed[e.id]).sort((a, b) => (lastUsed[a.id] < lastUsed[b.id] ? 1 : -1)).slice(0, 5);
+  const recent = q || prog ? [] : list.filter(e => lastUsed[e.id]).sort((a, b) => (lastUsed[a.id] < lastUsed[b.id] ? 1 : -1)).slice(0, 5);
   const recentIds = new Set(recent.map(e => e.id));
   const az = arr => [...arr].sort((a, b) => a.name.localeCompare(b.name));
   const byKind = k => az(list.filter(e => e.kind === k && !recentIds.has(e.id)));
-  const item = e => `<button class="pick ${selected.has(e.id) ? 'on' : ''}" data-act="pick" data-id="${e.id}"><span>${esc(e.name)}</span><span class="muted small">${lastUsed[e.id] ? fmtShort(lastUsed[e.id]) : e.group}</span></button>`;
+  const item = e => `<button class="pick ${selected.has(e.id) ? 'on' : ''}" data-act="pick" data-id="${e.id}"><span>${esc(e.name)}</span><span class="muted small">${prog ? `${counts[e.id] || 0} sessions` : lastUsed[e.id] ? fmtShort(lastUsed[e.id]) : e.group}</span></button>`;
   const block = (title, arr, cls = '') => (arr.length ? `<h3 class="${cls}">${title}</h3>${arr.map(item).join('')}` : '');
   return `<div class="modal"><div class="sheet">
     <div class="sheethead"><input id="pickq" type="search" placeholder="Search exercises" value="${esc(ui.picker.q || '')}" autocomplete="off"><button class="btn small" data-act="closePicker">Done</button></div>
     <div class="sheetbody">
       ${recent.length ? `<div class="recent">${block('Recent', recent, 'recenth')}</div>` : ''}
-      ${block(q ? 'Lifts' : 'Lifts · A–Z', byKind('lift'))}${block('Core · A–Z', byKind('core'))}${block('Mobility · A–Z', byKind('mobility'))}
-      ${q && !list.some(e => e.name.toLowerCase() === q) ? `<button class="btn ghost wide" data-act="createEx">+ Create "${esc(ui.picker.q)}"</button>` : ''}
+      ${prog ? block('Exercises · A–Z', az(list)) : block(q ? 'Lifts' : 'Lifts · A–Z', byKind('lift'))}${prog ? '' : `${block('Core · A–Z', byKind('core'))}${block('Mobility · A–Z', byKind('mobility'))}`}
+      ${q && !prog && !list.some(e => e.name.toLowerCase() === q) ? `<button class="btn ghost wide" data-act="createEx">+ Create "${esc(ui.picker.q)}"</button>` : ''}
     </div></div></div>`;
 }
 
@@ -495,7 +496,7 @@ routes.run = function run(id) {
 routes.progress = function progress() {
   const usage = {};
   doneSessions().forEach(s => s.entries.forEach(e => { usage[e.exId] = (usage[e.exId] || 0) + 1; }));
-  const lifts = S.exercises.filter(e => e.kind !== 'mobility' && usage[e.id]).sort((a, b) => usage[b.id] - usage[a.id]);
+  const lifts = S.exercises.filter(e => e.kind !== 'mobility' && usage[e.id]).sort((a, b) => a.name.localeCompare(b.name));
   if (!ui.progEx || !exById(ui.progEx)) ui.progEx = lifts[0]?.id || null;
   const ex = exById(ui.progEx);
   let exBlock = '<p class="muted">Log a few sessions to see progress.</p>';
@@ -534,8 +535,6 @@ routes.progress = function progress() {
   // Weekly working sets (lifts), last 12 weeks
   const weeks = lastWeeks(12);
   const setsPerWeek = Object.fromEntries(weeks.map(w => [w, 0]));
-  const groupThisWeek = {};
-  const curWk = weeks[weeks.length - 1];
   doneSessions().forEach(s => {
     const wk = weekKey(s.start);
     s.entries.forEach(e => {
@@ -543,46 +542,49 @@ routes.progress = function progress() {
       if (!isLift(x)) return;
       const n = workingSets(e, x).length;
       if (wk in setsPerWeek) setsPerWeek[wk] += n;
-      if (wk === curWk) groupThisWeek[x.group] = (groupThisWeek[x.group] || 0) + n;
     });
   });
   const kmPerWeek = Object.fromEntries(weeks.map(w => [w, 0]));
   S.runs.forEach(r => { const wk = weekKey(r.date); if (wk in kmPerWeek) kmPerWeek[wk] += r.distKm || 0; });
-  const paces = S.runs.filter(r => r.distKm > 0 && r.durSec > 0 && r.type !== 'Interval').map(r => ({ x: parseLocal(r.date), y: r.durSec / r.distKm, color: r.type === 'Race' ? 'var(--off)' : r.type === 'Treadmill' ? 'var(--gym)' : 'var(--home)', label: `${fmtShort(r.date)} ${r.type} ${r.distKm} km ${fmtPace(r.durSec, r.distKm)}` }));
+  const paces = S.runs.filter(r => r.distKm > 0 && r.durSec > 0).map(r => ({ x: parseLocal(r.date), y: r.durSec / r.distKm, color: r.type === 'Race' ? 'var(--off)' : r.type === 'Treadmill' ? 'var(--gym)' : 'var(--home)', label: `${fmtShort(r.date)} ${r.type} ${r.distKm} km ${fmtPace(r.durSec, r.distKm)}` }));
   const bw = [...S.bodyweight].sort((a, b) => (a.date < b.date ? -1 : 1)).map(b => ({ x: parseLocal(b.date), y: b.kg, label: `${fmtShort(b.date)}: ${b.kg} kg` }));
 
   const wkOff = ui.mweek || 0;
   const wkStart = lastWeeks(wkOff + 1)[0];
   const wkSessions = doneSessions().filter(s => weekKey(s.start) === wkStart);
   const muscleBlock = musclesCard(wkSessions, 'Muscles this week', [3, 6, 9], 'sets', chips('mweek', [[0, 'This week'], [1, 'Last week']], wkOff) + `<p class="muted small">Week of ${fmtShort(wkStart)} · ${wkSessions.length} session${wkSessions.length === 1 ? '' : 's'}</p>`);
-  return `<header class="top"><h1>Progress</h1></header>
+  const tab = ui.ptab || 'lifts';
+  let body;
+  if (tab === 'lifts') body = `
   ${muscleBlock}
   <section class="card">
     <label>Exercise</label>
-    <select id="progEx">${lifts.map(e => `<option value="${e.id}" ${e.id === ui.progEx ? 'selected' : ''}>${esc(e.name)} (${usage[e.id]})</option>`).join('')}</select>
+    <button class="selectbtn" data-act="openPicker" data-mode="progress"><span>${ex ? esc(ex.name) : 'Choose exercise'}</span><span class="muted small">${ex ? `${usage[ex.id]} sessions` : ''} ▾</span></button>
     ${exBlock}
   </section>
   <section class="card"><h3>Working sets per week</h3>
     ${barChart(weeks.map(w => ({ label: fmtShort(w), value: setsPerWeek[w] })))}
-    <p class="muted small">This week: ${Object.entries(groupThisWeek).map(([g, n]) => `${g} ${n}`).join(' · ') || 'none yet'}</p>
-  </section>
+  </section>`;
+  else if (tab === 'running') body = `
   <section class="card"><h3>Running km per week</h3>
     ${barChart(weeks.map(w => ({ label: fmtShort(w), value: +kmPerWeek[w].toFixed(1) })), { color: 'var(--home)' })}
   </section>
   <section class="card"><h3>Pace</h3>
-    ${lineChart([{ name: 'pace', color: 'var(--muted)', points: paces }], { yLabel: 'min/km', yFmt: v => fmtDur(v) })}
+    ${lineChart([{ name: 'pace', color: 'var(--muted)', points: paces }], { yLabel: 'min/km', yFmt: v => fmtDur(v), invert: true, cornerNote: 'faster ↑' })}
     ${legend([['Outdoor', 'var(--home)'], ['Treadmill', 'var(--gym)'], ['Race', 'var(--off)']])}
-  </section>
-  <section class="card"><h3>Body weight</h3>
+  </section>`;
+  else body = `
+  <section class="card form"><h3>Body weight</h3>
     ${lineChart([{ name: 'kg', color: 'var(--accent)', points: bw }], { yLabel: 'kg' })}
-  </section>
-  ${histHtml()}`;
+    <div class="grid2"><div><label>Date</label><input id="bwDate" type="date" value="${today()}"></div><div><label>kg</label><input id="bwKg" inputmode="decimal" placeholder="71.5"></div></div>
+    <div class="actions"><button class="btn primary" data-act="saveBw">+ Add weight</button><button class="btn ghost" data-act="goto" data-h="#/body">All entries</button></div>
+  </section>`;
+  return `<header class="top"><h1>Progress</h1></header>
+  <div class="tabs">${[['lifts', 'Lifts'], ['running', 'Running'], ['body', 'Body']].map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="ptab" data-k="${k}">${l}</button>`).join('')}</div>
+  ${body}
+  ${pickerHtml()}${histHtml()}`;
 };
 routes.progress.tab = 'progress';
-routes.progress.after = () => {
-  const sel = document.getElementById('progEx');
-  if (sel) sel.onchange = () => { ui.progEx = sel.value; rerender(); };
-};
 
 function lastWeeks(n) {
   const out = [];
@@ -795,7 +797,8 @@ const actions = {
   showHist: el => { ui.hist = el.dataset.id; rerender(); },
   closeHist: () => { ui.hist = null; rerender(); },
   noop: () => {},
-  histToProgress: el => { ui.progEx = el.dataset.id; ui.hist = null; go('#/progress'); },
+  ptab: el => { ui.ptab = el.dataset.k; rerender(); },
+  histToProgress: el => { ui.progEx = el.dataset.id; ui.ptab = 'lifts'; ui.hist = null; go('#/progress'); },
   why: el => { ui.openWhy[el.dataset.k] = !ui.openWhy[el.dataset.k]; rerender(); },
   mv: el => {
     const i = +el.dataset.i, j = i + +el.dataset.d;
@@ -813,6 +816,7 @@ const actions = {
   closePicker: () => { ui.picker = null; rerender(); },
   pick: el => {
     const id = el.dataset.id;
+    if (ui.picker.mode === 'progress') { ui.progEx = id; ui.picker = null; rerender(); return; }
     if (ui.picker.mode === 'plan') {
       const i = draft.exIds.indexOf(id);
       if (i >= 0) draft.exIds.splice(i, 1); else draft.exIds.push(id);

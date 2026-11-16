@@ -71,17 +71,17 @@ Tap an exercise name (plan, session, summary) → last 10 sessions of that exerc
 **Recent** (5 most recently used) on top, clearly labelled. Everything else A–Z, grouped Lifts / Core / Mobility. Searching shows A–Z only.
 
 ## Muscle map
-Labelled body figure (front/back toggle), one green scale, set counts per muscle.
+Labelled body figure (front/back toggle), one green scale with clearly separated steps. Labels show muscle names only (no numbers); the legend below explains the shades in sets.
 - Shown after finishing a session ("Muscles worked") and weekly in Progress (this week / last week).
 - Counted in **working sets**. Primary muscle = 1 set, major helper = ½, minor helper = ¼. Mobility is not counted; core/abs is.
 - The exercise → muscle table lives in `js/muscles.js` (`MUSCLE_MAP`). Unknown exercises fall back to their muscle group.
 
-## Charts
-- Per exercise: top set weight and estimated 1RM over time, points colored by location
-- Unilateral: Left vs Right imbalance trend
-- Weekly sets per muscle group
-- Running: weekly km and pace trend
-- Body weight
+## Progress tab
+Three tabs so charts never mix:
+- **Lifts**: muscle map (this week / last week), progress for one exercise (est. 1RM or top set, points colored by location; Left vs Right for unilateral), working sets per week.
+  The exercise is chosen from a searchable A–Z list (type to filter).
+- **Running**: km per week, and pace for every run. The pace axis is inverted (faster = higher, marked "faster ↑").
+- **Body**: body weight chart with a quick "+ Add weight" form.
 
 ## Data
 - Export: full JSON backup + CSV for Excel (two files: sets, runs).

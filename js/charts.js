@@ -22,7 +22,7 @@ const fmtTick = v => (Math.abs(v) >= 100 ? Math.round(v) : +v.toFixed(1));
 /**
  * series: [{ name, color, points: [{ x: Date|number, y, color?, label? }], dashed? }]
  */
-export function lineChart(series, { yLabel = '', xFmt = d => `${d.getDate()}/${d.getMonth() + 1}`, yFmt = fmtTick, height = H } = {}) {
+export function lineChart(series, { yLabel = '', xFmt = d => `${d.getDate()}/${d.getMonth() + 1}`, yFmt = fmtTick, height = H, invert = false, cornerNote = '' } = {}) {
   const pts = series.flatMap(s => s.points);
   if (pts.length < 1) return `<p class="muted small">Not enough data yet.</p>`;
   const xs = pts.map(p => +p.x), ys = pts.map(p => p.y);
@@ -30,7 +30,8 @@ export function lineChart(series, { yLabel = '', xFmt = d => `${d.getDate()}/${d
   const [y0, y1] = scale(ys);
   const h = height;
   const X = x => P.l + ((+x - x0) / (x1 - x0)) * (W - P.l - P.r);
-  const Y = y => h - P.b - ((y - y0) / (y1 - y0)) * (h - P.t - P.b);
+  // invert: smaller values plotted higher (e.g. pace, where lower = faster).
+  const Y = y => invert ? P.t + ((y - y0) / (y1 - y0)) * (h - P.t - P.b) : h - P.b - ((y - y0) / (y1 - y0)) * (h - P.t - P.b);
   let g = '';
   for (const t of ticks(y0, y1)) g += `<line x1="${P.l}" x2="${W - P.r}" y1="${Y(t)}" y2="${Y(t)}" class="grid"/><text x="${P.l - 4}" y="${Y(t) + 3}" class="ax" text-anchor="end">${esc(yFmt(t))}</text>`;
   const xt = [x0, (x0 + x1) / 2, x1];
@@ -41,6 +42,7 @@ export function lineChart(series, { yLabel = '', xFmt = d => `${d.getDate()}/${d
     for (const p of sp) g += `<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="3" fill="${p.color || s.color}"><title>${esc(p.label || '')}</title></circle>`;
   }
   if (yLabel) g += `<text x="${P.l}" y="9" class="ax">${esc(yLabel)}</text>`;
+  if (cornerNote) g += `<text x="${W - P.r}" y="9" class="ax note" text-anchor="end">${esc(cornerNote)}</text>`;
   return `<svg viewBox="0 0 ${W} ${h}" class="chart" role="img">${g}</svg>`;
 }
 

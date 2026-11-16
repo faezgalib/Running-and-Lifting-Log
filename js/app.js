@@ -13,7 +13,7 @@ import { muscleVolume, muscleFigure, shadeLegend } from './muscles.js';
 const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], meta: {} };
 let draft = null;          // plan being built
 let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
-const APP_VERSION = 'v8';
+const APP_VERSION = 'v9';
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
 const RUN_TYPES = ['Easy', 'Tempo', 'Interval', 'Long', 'Race', 'Treadmill'];
@@ -114,7 +114,7 @@ function route() {
   const fn = routes[path] || routes[''];
   if (path !== 'run') ui.runEdit = null;
   if (path !== 'races') ui.raceEdit = null;
-  ui.picker = null;
+  ui.picker = null; ui.hist = null;
   window.scrollTo(0, 0);
   render(fn, args);
 }
@@ -126,7 +126,50 @@ function render(fn = current?.fn, args = current?.args || []) {
   if (fn.after) fn.after(...args);
 }
 const rerender = () => { const y = window.scrollY; render(); window.scrollTo(0, y); };
-const go = h => { if (location.hash === h) route(); else location.hash = h; };
+
+// ---------- navigation (Android-style Back) ----------
+// History stays shallow: Home (depth 0) → tab or page (1) → detail (2), plus one entry while a sheet is open.
+// Back on Home leaves the app, Back on a tab returns Home, Back on a detail returns to its parent, Back closes sheets.
+const TABS = ['#/', '#/history', '#/progress', '#/more'];
+const depth = () => (history.state && history.state.d) || 0;
+let pendingTab = null, ignorePop = 0, sheetOpen = false;
+function go(h) {
+  dropSheet();
+  history.pushState({ d: depth() + 1 }, '', h);
+  route();
+}
+function goReplace(h) {
+  dropSheet();
+  history.replaceState({ d: depth() }, '', h);
+  route();
+}
+function goTab(h) {
+  dropSheet();
+  const d = depth();
+  if (h === '#/') { if (d === 0) route(); else history.go(-d); return; }
+  if (d === 0) { history.pushState({ d: 1 }, '', h); route(); return; }
+  pendingTab = h;
+  history.go(-d);
+}
+function goBack(fallback = '#/') { if (depth() > 0) history.back(); else goReplace(fallback); }
+function openSheet() {
+  if (sheetOpen) return;
+  sheetOpen = true;
+  history.pushState({ d: depth() + 1, sheet: 1 }, '', location.hash || '#/');
+}
+function closeSheet() {
+  ui.picker = null; ui.hist = null;
+  if (sheetOpen) { sheetOpen = false; ignorePop++; history.back(); }
+  rerender();
+}
+// Leaving the page while a sheet is open: forget the sheet; its history entry is replaced or skipped.
+function dropSheet() { if (sheetOpen) { sheetOpen = false; ui.picker = null; ui.hist = null; } }
+window.addEventListener('popstate', () => {
+  if (ignorePop) { ignorePop--; return; }
+  if (sheetOpen) { sheetOpen = false; ui.picker = null; ui.hist = null; rerender(); return; }
+  if (pendingTab) { const h = pendingTab; pendingTab = null; history.pushState({ d: 1 }, '', h); }
+  route();
+});
 
 function nav(tab) {
   const items = [['', 'Home', 'M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z'], ['history', 'History', 'M12 7v5l3 2M21 12a9 9 0 1 1-9-9 9 9 0 0 1 9 9z'], ['progress', 'Progress', 'M4 19V9m6 10V5m6 14v-7m4 7H2'], ['more', 'More', 'M5 12h.01M12 12h.01M19 12h.01']];
@@ -240,7 +283,7 @@ routes.plan = function plan() {
   }).join('');
   const ready = draft.location && draft.exIds.length;
   return `
-  <header class="top"><button class="back" data-act="goto" data-h="#/">‹</button><h1>Plan session</h1></header>
+  <header class="top"><button class="back" data-act="back" data-h="#/">‹</button><h1>Plan session</h1></header>
   <section class="card">
     <label>Location</label>${chips('location', LOCS.map(l => [l, l]), draft.location)}
     <label>Sleep last night (h)</label>${chips('sleep', SLEEP, draft.sleep)}
@@ -328,7 +371,7 @@ routes.workout = function workout(id) {
   const editing = s.status === 'done';
   const cards = s.entries.map((e, ei) => entryCard(s, e, ei)).join('');
   return `
-  <header class="top"><button class="back" data-act="goto" data-h="#/">‹</button><h1>${editing ? 'Edit session' : 'Session'}</h1><span class="right">${locBadge(s.location)}</span></header>
+  <header class="top"><button class="back" data-act="back" data-h="#/">‹</button><h1>${editing ? 'Edit session' : 'Session'}</h1><span class="right">${locBadge(s.location)}</span></header>
   <p class="muted small ctxline">${fmtDate(s.start)} · ${fmtTime(s.start)}${s.sleep != null ? ` · sleep ${s.sleep >= 8 ? '8+' : s.sleep <= 4 ? '≤4' : s.sleep} h` : ''}</p>
   ${cards}
   <div class="actions"><button class="btn" data-act="openPicker" data-mode="session" data-id="${s.id}">+ Add exercise</button></div>
@@ -428,7 +471,7 @@ routes.session = function session(id) {
       ${e.note ? `<p class="note">${esc(e.note)}</p>` : ''}</div>`;
   }).join('');
   return `
-  <header class="top"><button class="back" data-act="goto" data-h="#/history">‹</button><h1>${fmtDate(s.start)}</h1></header>
+  <header class="top"><button class="back" data-act="back" data-h="#/history">‹</button><h1>${fmtDate(s.start)}</h1></header>
   <section class="card">
     <label>Location</label>${chips(`sloc:${s.id}`, LOCS.map(l => [l, l]), s.location)}
     <p class="muted small">${fmtTime(s.start)}${dur ? ` · ${fmtDur(dur)}` : ''}${s.sleep != null ? ` · sleep ${s.sleep >= 8 ? '8+' : s.sleep} h` : ''}${s.source === 'hevy' ? ' · imported from Hevy' : ''}</p>
@@ -470,7 +513,7 @@ routes.run = function run(id) {
   if (!r) return `<p>Run not found.</p>`;
   ui.runEdit = r;
   return `
-  <header class="top"><button class="back" data-act="goto" data-h="${isNew ? '#/' : '#/history'}">‹</button><h1>${isNew ? 'Log run' : 'Run'}</h1></header>
+  <header class="top"><button class="back" data-act="back" data-h="${isNew ? '#/' : '#/history'}">‹</button><h1>${isNew ? 'Log run' : 'Run'}</h1></header>
   <section class="card form">
     <label>Date & time</label><input type="datetime-local" data-run="date" value="${r.date}">
     <label>Type</label>${chips('rtype', RUN_TYPES.map(t => [t, t]), r.type)}
@@ -547,21 +590,21 @@ routes.progress = function progress() {
   const kmPerWeek = Object.fromEntries(weeks.map(w => [w, 0]));
   S.runs.forEach(r => { const wk = weekKey(r.date); if (wk in kmPerWeek) kmPerWeek[wk] += r.distKm || 0; });
   const paces = S.runs.filter(r => r.distKm > 0 && r.durSec > 0).map(r => ({ x: parseLocal(r.date), y: r.durSec / r.distKm, color: r.type === 'Race' ? 'var(--off)' : r.type === 'Treadmill' ? 'var(--gym)' : 'var(--home)', label: `${fmtShort(r.date)} ${r.type} ${r.distKm} km ${fmtPace(r.durSec, r.distKm)}` }));
-  const bw = [...S.bodyweight].sort((a, b) => (a.date < b.date ? -1 : 1)).map(b => ({ x: parseLocal(b.date), y: b.kg, label: `${fmtShort(b.date)}: ${b.kg} kg` }));
 
   const wkOff = ui.mweek || 0;
   const wkStart = lastWeeks(wkOff + 1)[0];
   const wkSessions = doneSessions().filter(s => weekKey(s.start) === wkStart);
-  const muscleBlock = musclesCard(wkSessions, 'Muscles this week', [3, 6, 9], 'sets', chips('mweek', [[0, 'This week'], [1, 'Last week']], wkOff) + `<p class="muted small">Week of ${fmtShort(wkStart)} · ${wkSessions.length} session${wkSessions.length === 1 ? '' : 's'}</p>`);
-  const tab = ui.ptab || 'lifts';
+  const muscleBlock = musclesCard(wkSessions, 'Muscles', [3, 6, 9], 'sets', chips('mweek', [[0, 'This week'], [1, 'Last week']], wkOff) + `<p class="muted small">Week of ${fmtShort(wkStart)} · ${wkSessions.length} session${wkSessions.length === 1 ? '' : 's'}</p>`);
+  const tab = ui.ptab === 'running' ? 'running' : 'lifts';
   let body;
   if (tab === 'lifts') body = `
-  ${muscleBlock}
+  <h2 class="sect">Exercise progress</h2>
   <section class="card">
-    <label>Exercise</label>
     <button class="selectbtn" data-act="openPicker" data-mode="progress"><span>${ex ? esc(ex.name) : 'Choose exercise'}</span><span class="muted small">${ex ? `${usage[ex.id]} sessions` : ''} ▾</span></button>
     ${exBlock}
   </section>
+  <h2 class="sect">Weekly overview <span class="muted small">all exercises</span></h2>
+  ${muscleBlock}
   <section class="card"><h3>Working sets per week</h3>
     ${barChart(weeks.map(w => ({ label: fmtShort(w), value: setsPerWeek[w] })))}
   </section>`;
@@ -573,14 +616,8 @@ routes.progress = function progress() {
     ${lineChart([{ name: 'pace', color: 'var(--muted)', points: paces }], { yLabel: 'min/km', yFmt: v => fmtDur(v), invert: true, cornerNote: 'faster ↑' })}
     ${legend([['Outdoor', 'var(--home)'], ['Treadmill', 'var(--gym)'], ['Race', 'var(--off)']])}
   </section>`;
-  else body = `
-  <section class="card form"><h3>Body weight</h3>
-    ${lineChart([{ name: 'kg', color: 'var(--accent)', points: bw }], { yLabel: 'kg' })}
-    <div class="grid2"><div><label>Date</label><input id="bwDate" type="date" value="${today()}"></div><div><label>kg</label><input id="bwKg" inputmode="decimal" placeholder="71.5"></div></div>
-    <div class="actions"><button class="btn primary" data-act="saveBw">+ Add weight</button><button class="btn ghost" data-act="goto" data-h="#/body">All entries</button></div>
-  </section>`;
   return `<header class="top"><h1>Progress</h1></header>
-  <div class="tabs">${[['lifts', 'Lifts'], ['running', 'Running'], ['body', 'Body']].map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="ptab" data-k="${k}">${l}</button>`).join('')}</div>
+  <div class="tabs">${[['lifts', 'Lifting'], ['running', 'Running']].map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="ptab" data-k="${k}">${l}</button>`).join('')}</div>
   ${body}
   ${pickerHtml()}${histHtml()}`;
 };
@@ -638,7 +675,7 @@ routes.exercises = function exercises() {
     const arr = S.exercises.filter(e => e.kind === k).sort((a, b) => a.name.localeCompare(b.name));
     return `<h2>${title}</h2><div class="list">${arr.map(e => `<a class="row" href="#/exercise/${e.id}"><div><b class="${e.archived ? 'muted' : ''}">${esc(e.name)}</b><span class="muted small">${e.group} · ${e.equipment}${e.unilateral || e.perSide ? ' · L/R' : ''}${e.load === 'total' ? ' · total 2 DB' : ''}${e.archived ? ' · hidden' : ''}</span></div><span class="muted">›</span></a>`).join('')}</div>`;
   };
-  return `<header class="top"><button class="back" data-act="goto" data-h="#/more">‹</button><h1>Exercises</h1></header>
+  return `<header class="top"><button class="back" data-act="back" data-h="#/more">‹</button><h1>Exercises</h1></header>
   <div class="actions"><button class="btn" data-act="newEx">+ New exercise</button></div>
   ${block('lift', 'Lifts')}${block('core', 'Core')}${block('mobility', 'Mobility')}`;
 };
@@ -649,7 +686,7 @@ routes.exercise = function exercise(id) {
   if (!e) return '<p>Not found.</p>';
   ui.exEdit = e;
   const opt = (field, list, val) => chips(`ex:${field}`, list.map(x => (Array.isArray(x) ? x : [x, x])), val);
-  return `<header class="top"><button class="back" data-act="goto" data-h="#/exercises">‹</button><h1>Edit exercise</h1></header>
+  return `<header class="top"><button class="back" data-act="back" data-h="#/exercises">‹</button><h1>Edit exercise</h1></header>
   <section class="card form">
     <label>Name</label><input data-exf="name" value="${esc(e.name)}">
     <label>Kind</label>${opt('kind', [['lift', 'Lift'], ['core', 'Core'], ['mobility', 'Mobility']], e.kind)}
@@ -686,7 +723,7 @@ routes.exercise.after = () => {
 routes.races = function races() {
   const list = [...S.races].sort((a, b) => (a.date < b.date ? -1 : 1));
   const r = ui.raceEdit || { id: null, name: '', date: '', distKm: '', targetSec: null, resultSec: null };
-  return `<header class="top"><button class="back" data-act="goto" data-h="#/more">‹</button><h1>Races</h1></header>
+  return `<header class="top"><button class="back" data-act="back" data-h="#/more">‹</button><h1>Races</h1></header>
   <div class="list">${list.map(x => `<button class="row" data-act="editRace" data-id="${x.id}"><div><b>${esc(x.name)}</b><span class="muted small">${fmtDate(x.date)} · ${x.distKm} km</span></div><div class="right">${x.resultSec ? `<b>${fmtDur(x.resultSec)}</b><span class="muted small">result</span>` : x.targetSec ? `<span class="muted small">target ${fmtDur(x.targetSec)}</span>` : ''}</div></button>`).join('') || '<p class="muted">No races yet.</p>'}</div>
   <section class="card form"><h3>${r.id ? 'Edit race' : 'Add race'}</h3>
     <label>Name</label><input id="rcName" value="${esc(r.name)}" placeholder="e.g. 10K race">
@@ -704,9 +741,11 @@ routes.races.tab = 'more';
 // Body weight
 routes.body = function body() {
   const list = [...S.bodyweight].sort((a, b) => (a.date < b.date ? 1 : -1));
-  return `<header class="top"><button class="back" data-act="goto" data-h="#/more">‹</button><h1>Body weight</h1></header>
+  const pts = [...list].reverse().map(b => ({ x: parseLocal(b.date), y: b.kg, label: `${fmtShort(b.date)}: ${b.kg} kg` }));
+  return `<header class="top"><button class="back" data-act="back" data-h="#/more">‹</button><h1>Body weight</h1></header>
+  <section class="card">${lineChart([{ name: 'kg', color: 'var(--accent)', points: pts }], { yLabel: 'kg' })}</section>
   <section class="card form"><div class="grid2"><div><label>Date</label><input id="bwDate" type="date" value="${today()}"></div><div><label>kg</label><input id="bwKg" inputmode="decimal" placeholder="71.5"></div></div>
-  <div class="actions"><button class="btn primary" data-act="saveBw">Add</button></div></section>
+  <div class="actions"><button class="btn primary" data-act="saveBw">+ Add weight</button></div></section>
   <div class="list">${list.map(b => `<div class="row"><span>${fmtDate(b.date)}</span><span><b>${b.kg} kg</b> <button class="icon" data-act="delBw" data-id="${b.id}">×</button></span></div>`).join('')}</div>`;
 };
 routes.body.tab = 'more';
@@ -714,7 +753,7 @@ routes.body.tab = 'more';
 // Hevy import
 routes.import = function imp() {
   const h = ui.hevy;
-  return `<header class="top"><button class="back" data-act="goto" data-h="#/more">‹</button><h1>Import from Hevy</h1></header>
+  return `<header class="top"><button class="back" data-act="back" data-h="#/more">‹</button><h1>Import from Hevy</h1></header>
   <section class="card form">
     <p class="small">In Hevy: Profile → Settings → Export &amp; Import Data → Export Workouts. Then pick the CSV file here.</p>
     <label>Offshore periods (one per line, YYYY-MM-DD to YYYY-MM-DD)</label>
@@ -754,7 +793,8 @@ routes.import.after = () => {
 
 // ---------- actions ----------
 const actions = {
-  goto: el => go(el.dataset.h),
+  goto: el => (TABS.includes(el.dataset.h) ? goTab(el.dataset.h) : go(el.dataset.h)),
+  back: el => goBack(el.dataset.h || '#/'),
   newPlan: () => {
     const act = activeSession();
     if (act) { go(`#/workout/${act.id}`); return; }
@@ -794,11 +834,11 @@ const actions = {
     }
     rerender();
   },
-  showHist: el => { ui.hist = el.dataset.id; rerender(); },
-  closeHist: () => { ui.hist = null; rerender(); },
+  showHist: el => { ui.hist = el.dataset.id; openSheet(); rerender(); },
+  closeHist: () => closeSheet(),
   noop: () => {},
   ptab: el => { ui.ptab = el.dataset.k; rerender(); },
-  histToProgress: el => { ui.progEx = el.dataset.id; ui.ptab = 'lifts'; ui.hist = null; go('#/progress'); },
+  histToProgress: el => { ui.progEx = el.dataset.id; ui.ptab = 'lifts'; goTab('#/progress'); },
   why: el => { ui.openWhy[el.dataset.k] = !ui.openWhy[el.dataset.k]; rerender(); },
   mv: el => {
     const i = +el.dataset.i, j = i + +el.dataset.d;
@@ -812,11 +852,11 @@ const actions = {
     draft.exIds = s.entries.map(e => e.exId).filter(exById);
     saveDraft(); rerender();
   },
-  openPicker: el => { ui.picker = { mode: el.dataset.mode, sid: el.dataset.id, q: '' }; rerender(); focusPicker(); },
-  closePicker: () => { ui.picker = null; rerender(); },
+  openPicker: el => { ui.picker = { mode: el.dataset.mode, sid: el.dataset.id, q: '' }; openSheet(); rerender(); focusPicker(); },
+  closePicker: () => closeSheet(),
   pick: el => {
     const id = el.dataset.id;
-    if (ui.picker.mode === 'progress') { ui.progEx = id; ui.picker = null; rerender(); return; }
+    if (ui.picker.mode === 'progress') { ui.progEx = id; closeSheet(); return; }
     if (ui.picker.mode === 'plan') {
       const i = draft.exIds.indexOf(id);
       if (i >= 0) draft.exIds.splice(i, 1); else draft.exIds.push(id);
@@ -825,8 +865,7 @@ const actions = {
     } else {
       const s = S.sessions.find(x => x.id === ui.picker.sid);
       addEntry(s, id);
-      ui.picker = null;
-      save('sessions', s); rerender();
+      save('sessions', s); closeSheet();
     }
   },
   createEx: () => {
@@ -841,7 +880,7 @@ const actions = {
     draft.exIds.forEach(id => addEntry(s, id));
     save('sessions', s);
     draft = null; setMeta('draft', null);
-    go(`#/workout/${s.id}`);
+    goReplace(`#/workout/${s.id}`);
   },
   addSet: el => withEntry(el, (s, e) => { e.sets.push({ drop: [] }); }),
   rmSet: el => withEntry(el, (s, e) => { e.sets.splice(+el.dataset.s, 1); }),
@@ -869,30 +908,31 @@ const actions = {
   finish: el => {
     const s = S.sessions.find(x => x.id === el.dataset.id);
     cleanSession(s);
-    if (!s.entries.length) { if (confirm('No sets logged. Discard this session?')) { remove('sessions', s.id); go('#/'); } return; }
+    if (!s.entries.length) { if (confirm('No sets logged. Discard this session?')) { remove('sessions', s.id); goTab('#/'); } return; }
     s.status = 'done'; s.end = nowIso();
     save('sessions', s);
-    go(`#/session/${s.id}`);
+    goReplace(`#/session/${s.id}`);
     toast('Session saved');
   },
   saveEdit: el => {
     const s = S.sessions.find(x => x.id === el.dataset.id);
     cleanSession(s);
     save('sessions', s);
-    go(`#/session/${s.id}`);
+    goBack(`#/session/${s.id}`);
   },
-  discard: el => { if (confirm('Discard this session? Logged sets will be lost.')) { remove('sessions', el.dataset.id); go('#/'); } },
-  delSession: el => { if (confirm('Delete this session permanently?')) { remove('sessions', el.dataset.id); go('#/history'); } },
+  discard: el => { if (confirm('Discard this session? Logged sets will be lost.')) { remove('sessions', el.dataset.id); goTab('#/'); } },
+  delSession: el => { if (confirm('Delete this session permanently?')) { remove('sessions', el.dataset.id); goBack('#/history'); } },
   saveRun: () => {
     const r = ui.runEdit;
     readRunInputs(r);
     if (!r.distKm || !r.durSec) { alert('Distance and duration are needed.'); return; }
+    const isNew = location.hash === '#/run/new';
     save('runs', r);
     ui.runDraft = null; ui.runEdit = null;
     toast('Run saved');
-    go('#/history');
+    if (isNew) goReplace('#/history'); else goBack('#/history');
   },
-  delRun: el => { if (confirm('Delete this run?')) { remove('runs', el.dataset.id); go('#/history'); } },
+  delRun: el => { if (confirm('Delete this run?')) { remove('runs', el.dataset.id); goBack('#/history'); } },
   exportJson: async () => {
     const data = {};
     for (const s of STORES) data[s] = s === 'meta' ? (await db.all('meta')).filter(m => m.id !== 'lastBackup') : S[s];
@@ -943,7 +983,7 @@ const actions = {
     await db.putMany('runs', h.runs); S.runs.push(...h.runs);
     ui.hevy = null;
     toast(`Imported ${h.sessions.length} sessions and ${h.runs.length} runs`);
-    go('#/history');
+    goTab('#/history');
   },
   cancelImport: () => { ui.hevy = null; rerender(); },
 };
@@ -991,6 +1031,13 @@ function focusPicker(select = true) {
 
 // ---------- global events ----------
 document.addEventListener('click', ev => {
+  const a = ev.target.closest('a[href^="#/"]');
+  if (a) {
+    ev.preventDefault();
+    const h = a.getAttribute('href');
+    if (TABS.includes(h)) goTab(h); else go(h);
+    return;
+  }
   const el = ev.target.closest('[data-act]');
   if (!el) return;
   const fn = actions[el.dataset.act];
@@ -1031,13 +1078,18 @@ document.addEventListener('focusout', ev => {
   if (el.dataset && el.dataset.run === 'durSec' && ui.runEdit) el.value = ui.runEdit.durSec ? fmtDur(ui.runEdit.durSec) : el.value;
 });
 
-window.addEventListener('hashchange', route);
 
 // ---------- boot ----------
 (async function boot() {
   try {
     await load();
     requestPersistence();
+    // Make Home the bottom of the history stack, so Back always ends on Home and then leaves the app.
+    if (!history.state || history.state.d == null) {
+      const start = location.hash && location.hash !== '#' ? location.hash : '#/';
+      history.replaceState({ d: 0 }, '', '#/');
+      if (start !== '#/') history.pushState({ d: 1 }, '', start);
+    }
     route();
   } catch (e) {
     $app().innerHTML = `<main><p>Could not open storage: ${esc(e.message)}</p></main>`;

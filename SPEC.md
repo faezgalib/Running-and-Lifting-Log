@@ -77,11 +77,22 @@ Labelled body figure (front/back toggle), one green scale with clearly separated
 - The exercise → muscle table lives in `js/muscles.js` (`MUSCLE_MAP`). Unknown exercises fall back to their muscle group.
 
 ## Progress tab
-Three tabs so charts never mix:
-- **Lifts**: muscle map (this week / last week), progress for one exercise (est. 1RM or top set, points colored by location; Left vs Right for unilateral), working sets per week.
-  The exercise is chosen from a searchable A–Z list (type to filter).
+Two tabs so charts never mix: **Lifting | Running**.
+- **Lifting**, in two titled sections:
+  - **Exercise progress** (top, used most): one exercise chosen from a searchable A–Z list; est. 1RM or top set (points colored by location); Left vs Right for unilateral exercises.
+  - **Weekly overview** (all exercises): muscle map (this week / last week), working sets per week.
 - **Running**: km per week, and pace for every run. The pace axis is inverted (faster = higher, marked "faster ↑").
-- **Body**: body weight chart with a quick "+ Add weight" form.
+
+Body weight lives in **More → Body weight**: chart, quick add, and the list of entries.
+
+## Navigation (Back button)
+Behaves like a normal Android app:
+- Back on **Home** leaves the app.
+- Back on a tab (History, Progress, More) returns to Home.
+- Back on a detail page returns to its parent (session → History, Exercises → More).
+- Back closes an open sheet (exercise picker, exercise history) before leaving the page.
+- After Finish or saving a new run, Back does not return to the finished screen.
+- There is no "Close app" button (not an Android convention).
 
 ## Data
 - Export: full JSON backup + CSV for Excel (two files: sets, runs).

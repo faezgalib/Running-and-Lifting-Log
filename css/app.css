@@ -30,11 +30,34 @@ a { color: inherit; text-decoration: none; }
 
 header.top { display: flex; align-items: center; gap: 10px; min-height: 52px; position: sticky; top: 0; background: var(--bg); z-index: 5; }
 header.top .right { margin-left: auto; }
-.hero { display: flex; align-items: center; gap: 12px; padding: 18px 0 6px; }
-.hero img { border-radius: 12px; }
-.hero h1 { font-size: 21px; }
-.hero span { display: block; }
-.card.quote p { margin: 0 0 4px; font-size: 17px; font-weight: 600; color: var(--accent); }
+/* Home — option A "Poster": logo first, daily line second. Android system font (Roboto). */
+.hero { display: grid; justify-items: center; gap: 14px; padding: 34px 0 0; }
+.hero img { width: 104px; height: 104px; border-radius: 24px; }
+.hero .brand { font-size: 14px; letter-spacing: .34em; font-weight: 500; padding-left: .34em; }
+.poster { text-align: center; padding: 28px 6px 26px; }
+.poster .rule { width: 28px; height: 2px; background: var(--accent); margin: 0 auto 22px; border-radius: 2px; }
+.poster .q { font-weight: 300; font-size: 26px; line-height: 1.22; letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+.poster .by { margin-top: 14px; font-size: 11px; letter-spacing: .26em; color: var(--accent); font-weight: 500; }
+.poster .greet { margin-top: 22px; font-size: 13px; color: var(--muted); }
+.cta { display: grid; gap: 10px; margin: 6px 0 4px; }
+.btn.pill { border-radius: 999px; padding: 14px; font-size: 15px; }
+.btn.outline { background: transparent; border-color: var(--line); }
+.hh { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; letter-spacing: .24em; color: var(--muted); font-weight: 500; margin: 30px 0 12px; }
+.hh a { letter-spacing: .04em; color: var(--accent); font-size: 12.5px; }
+.wk { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.wk div { padding: 14px 0; text-align: center; }
+.wk div + div { border-left: 1px solid var(--line); }
+.wk b { display: block; font-weight: 300; font-size: 28px; line-height: 1.1; }
+.wk span { font-size: 11.5px; color: var(--muted); }
+.recent-home .rr { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.recent-home .rr:last-child { border-bottom: 0; }
+.recent-home .rd b { display: block; font-weight: 300; font-size: 22px; line-height: 1; }
+.recent-home .rd span { font-size: 10.5px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+.recent-home .rt { min-width: 0; }
+.recent-home .rt b { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recent-home .rt span { font-size: 12.5px; color: var(--muted); }
+.recent-home .rl { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.recent-home .rl i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
 .tabbar a { position: relative; }
 .tabbar .dot { position: absolute; top: 7px; left: calc(50% + 8px); width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
 .back { background: none; border: 0; color: var(--text); font-size: 28px; line-height: 1; padding: 0 6px 4px 0; cursor: pointer; }

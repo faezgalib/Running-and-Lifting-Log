@@ -14,7 +14,7 @@ const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], me
 let draft = null;          // plan being built
 let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.1';
+const APP_VERSION = 'v2.2';
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
 const RUN_TYPES = ['Easy', 'Tempo', 'Interval', 'Long', 'Race', 'Treadmill'];
@@ -196,26 +196,33 @@ routes[''] = function home() {
   const wkRuns = S.runs.filter(r => weekKey(r.date) === wk);
   const wkSets = wkSess.reduce((a, s) => a + s.entries.reduce((b, e) => b + (isLift(exById(e.exId)) ? workingSets(e, exById(e.exId)).length : 0), 0), 0);
   const km = wkRuns.reduce((a, r) => a + (r.distKm || 0), 0);
+  // Home (design option A "Poster"): logo first, daily line second, then actions, this week and a short Recent list.
+  const [quote, author] = dailyLine().split(' — ');
   return `
   <header class="hero">
-    <img src="icons/icon-192.png" alt="" width="44" height="44">
-    <div><h1>Lift Run Journey</h1><span class="muted small">${greeting()}</span></div>
+    <img src="icons/icon-192.png" alt="" width="104" height="104">
+    <div class="brand">LIFT RUN JOURNEY</div>
   </header>
-  <div class="card quote"><p>${esc(dailyLine())}</p><span class="muted small">${esc(momentum())}</span></div>
+  <section class="poster">
+    <div class="rule"></div>
+    <p class="q">${esc(quote)}</p>
+    ${author ? `<div class="by">${esc(author.toUpperCase())}</div>` : ''}
+    <div class="greet">${greeting()} · ${esc(momentum())}</div>
+  </section>
   ${act ? `<a class="card resume" href="#/workout/${act.id}"><b>Session in progress</b><span>${locBadge(act.location)} started ${fmtTime(act.start)} · ${act.entries.length} exercises</span><span class="go">Resume →</span></a>` : ''}
   ${nextRace ? `<div class="card race"><div class="big">${daysBetween(today(), nextRace.date)}</div><div><b>days to ${esc(nextRace.name)}</b><span class="muted">${fmtDate(nextRace.date)} · ${nextRace.distKm} km${nextRace.targetSec ? ` · target ${fmtDur(nextRace.targetSec)}` : ''}</span></div></div>` : ''}
-  <div class="actions">
-    <button class="btn primary" data-act="newPlan">Start session</button>
-    <button class="btn" data-act="goto" data-h="#/run/new">Log run</button>
+  <div class="cta">
+    <button class="btn primary pill" data-act="newPlan">Start session</button>
+    <button class="btn pill outline" data-act="goto" data-h="#/run/new">Log run</button>
   </div>
-  <section><h2>This week</h2>
-    <div class="stats">
-      <div><b>${wkSess.length}</b><span>sessions</span></div>
-      <div><b>${wkSets}</b><span>working sets</span></div>
-      <div><b>${+km.toFixed(1)}</b><span>km run</span></div>
-    </div>
-  </section>
-  <section><h2>Recent</h2>${activityList(8)}</section>`;
+  <div class="hh"><span>THIS WEEK</span></div>
+  <div class="wk">
+    <div><b>${wkSess.length}</b><span>sessions</span></div>
+    <div><b>${wkSets}</b><span>working sets</span></div>
+    <div><b>${+km.toFixed(1)}</b><span>km run</span></div>
+  </div>
+  <div class="hh"><span>RECENT</span><a href="#/history">See all</a></div>
+  ${homeRecent(5)}`;
 };
 routes[''].tab = '';
 
@@ -242,7 +249,33 @@ function momentum() {
   const runs = S.runs.filter(r => r.date.slice(0, 10) >= from);
   const km = runs.reduce((a, r) => a + (r.distKm || 0), 0);
   if (!ses && !runs.length) return 'A fresh start. Let\'s go.';
-  return `Last 30 days: ${ses} sessions · ${runs.length} runs · ${+km.toFixed(1)} km`;
+  const parts = [ses ? `${ses} session${ses === 1 ? '' : 's'}` : '', runs.length ? `${+km.toFixed(1)} km` : ''].filter(Boolean);
+  return `${parts.join(' and ')} in the last 30 days`;
+}
+
+// Home "Recent": at most 5 rows, one short summary line each (the full list lives in History).
+function homeRecent(limit = 5) {
+  const items = [
+    ...doneSessions().map(s => ({ d: s.start, s })),
+    ...S.runs.map(r => ({ d: r.date, r })),
+  ].sort((a, b) => (a.d < b.d ? 1 : -1)).slice(0, limit);
+  if (!items.length) return '<p class="muted small">Nothing logged yet.</p>';
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const date = iso => { const d = parseLocal(iso); return `<div class="rd"><b>${d.getDate()}</b><span>${MON[d.getMonth()]}</span></div>`; };
+  const place = l => (l ? `<div class="rl"><i style="background:${LOC_COLORS[l]}"></i>${l}</div>` : '<div></div>');
+  return `<div class="recent-home">${items.map(i => {
+    if (i.r) {
+      const r = i.r;
+      const title = r.type === 'Race' && r.raceName ? esc(r.raceName) : `${r.type === 'Treadmill' ? 'Treadmill' : r.type} run`;
+      const sub = r.type === 'Race' ? `${r.distKm} km · ${fmtDur(r.durSec)}` : `${r.distKm} km · ${fmtPace(r.durSec, r.distKm)}`;
+      return `<a class="rr" href="#/run/${r.id}">${date(r.date)}<div class="rt"><b>${title}</b><span>${sub}</span></div>${place(r.location)}</a>`;
+    }
+    const s = i.s;
+    const sets = s.entries.reduce((a, e) => a + e.sets.length, 0);
+    const n = s.entries.length;
+    const onlyMob = s.entries.every(e => exById(e.exId)?.kind === 'mobility');
+    return `<a class="rr" href="#/session/${s.id}">${date(s.start)}<div class="rt"><b>${onlyMob ? 'Mobility' : 'Lifting'}</b><span>${n} exercise${n === 1 ? '' : 's'} · ${sets} set${sets === 1 ? '' : 's'}</span></div>${place(s.location)}</a>`;
+  }).join('')}</div>`;
 }
 function backupDue() {
   if (!doneSessions().length && !S.runs.length) return false;

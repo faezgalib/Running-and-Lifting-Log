@@ -168,6 +168,12 @@ ol.sets li { margin: 3px 0; }
 
 /* muscle map */
 .musclemap { width: calc(100% + 16px); height: auto; display: block; margin: 4px -8px; }
-.musclemap .mn { fill: var(--muted); font-size: 13px; }
-.musclemap .mv { fill: var(--text); font-size: 13.5px; font-weight: 700; }
-.musclemap .mv.zero { fill: var(--muted); font-weight: 400; }
+.musclemap .mn { fill: var(--text); font-size: 13.5px; }
+.musclemap .mn.zero { fill: var(--muted); }
+
+/* progress tabs */
+.tabs { display: flex; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 3px; margin: 4px 0 10px; position: sticky; top: 52px; z-index: 4; }
+.tabs button { flex: 1; background: none; border: 0; color: var(--muted); font: inherit; font-weight: 600; padding: 9px 0; border-radius: 9px; cursor: pointer; }
+.tabs button.on { background: var(--surface2); color: var(--accent); }
+.selectbtn { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--surface2); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 11px 12px; font: inherit; text-align: left; cursor: pointer; margin-bottom: 8px; }
+.chart .ax.note { fill: var(--accent); }

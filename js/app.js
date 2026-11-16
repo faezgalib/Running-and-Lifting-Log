@@ -13,7 +13,8 @@ import { muscleVolume, muscleFigure, shadeLegend } from './muscles.js';
 const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], meta: {} };
 let draft = null;          // plan being built
 let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
-const APP_VERSION = 'v9';
+// Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
+const APP_VERSION = 'v2.0';
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
 const RUN_TYPES = ['Easy', 'Tempo', 'Interval', 'Long', 'Race', 'Treadmill'];
@@ -115,9 +116,14 @@ function route() {
   if (path !== 'run') ui.runEdit = null;
   if (path !== 'races') ui.raceEdit = null;
   ui.picker = null; ui.hist = null;
-  window.scrollTo(0, 0);
   render(fn, args);
+  window.scrollTo(0, restoreY != null ? restoreY : 0);
+  restoreY = null;
 }
+let restoreY = null; // set by Back so a list reopens where you left it
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+// Remember the scroll position of the page we are leaving, so Back can return to it.
+const rememberY = () => { if (history.state) history.replaceState({ ...history.state, y: window.scrollY }, '', location.hash || '#/'); };
 let current = null;
 function render(fn = current?.fn, args = current?.args || []) {
   current = { fn, args };
@@ -135,6 +141,7 @@ const depth = () => (history.state && history.state.d) || 0;
 let pendingTab = null, ignorePop = 0, sheetOpen = false;
 function go(h) {
   dropSheet();
+  rememberY();
   history.pushState({ d: depth() + 1 }, '', h);
   route();
 }
@@ -168,6 +175,10 @@ window.addEventListener('popstate', () => {
   if (ignorePop) { ignorePop--; return; }
   if (sheetOpen) { sheetOpen = false; ui.picker = null; ui.hist = null; rerender(); return; }
   if (pendingTab) { const h = pendingTab; pendingTab = null; history.pushState({ d: 1 }, '', h); }
+  // Home always opens at the top. Pages reached by Back (e.g. the History list after a session) keep their position;
+  // tabs opened from the menu are fresh entries without a saved position, so they open at the top too.
+  const st = history.state || {};
+  restoreY = (location.hash || '#/') === '#/' ? null : (st.y ?? null);
   route();
 });
 
@@ -637,9 +648,10 @@ routes.more = function more() {
   return `<header class="top"><h1>More</h1></header>
   <section class="card">
     <h3>Backup</h3>
-    <p class="muted small">${lb ? `Last backup: ${fmtDate(lb)} ${fmtTime(lb)}` : 'Never backed up.'} Your data lives only on this phone. Export regularly and keep the file somewhere safe (Google Drive, email to yourself).</p>
+    <p class="muted small">${lb ? `Last backup: ${fmtDate(lb)} ${fmtTime(lb)}` : 'Never backed up.'} Your data lives only on this phone. <b>Share backup</b> sends the file off the phone (Gmail, Drive, WhatsApp).</p>
     <p class="muted small">${counts}</p>
-    <div class="actions"><button class="btn primary" data-act="exportJson">Export backup (.json)</button><button class="btn" data-act="exportCsv">Export for Excel (.csv)</button></div>
+    <div class="actions"><button class="btn primary" data-act="shareBackup">Share backup</button><button class="btn" data-act="exportJson">Save to phone</button></div>
+    <div class="actions"><button class="btn" data-act="exportCsv">Export for Excel (.csv)</button></div>
     <div class="actions"><label class="btn ghost file">Restore backup<input type="file" accept=".json,application/json" id="restoreFile"></label></div>
   </section>
   <a class="card row" href="#/exercises"><b>Exercises</b><span class="muted">${S.exercises.filter(e => !e.archived).length} ›</span></a>
@@ -657,7 +669,14 @@ routes.more.after = () => {
     try {
       const data = JSON.parse(await file.text());
       if (data.app !== 'lift-run-journey' || !data.data) throw new Error('Not a Lift Run Journey backup.');
-      if (!confirm('Replace ALL data on this phone with this backup?')) return;
+      // Show what is in the file next to what is on the phone, so an old backup is not restored by mistake.
+      const n = (arr, f = () => true) => (arr || []).filter(f).length;
+      const d = data.data, when = data.exportedAt ? new Date(data.exportedAt) : null;
+      const msg = `Backup${when ? ` from ${fmtDate(isoDate(when))} ${isoDateTime(when).slice(11)}` : ''}:\n`
+        + `${n(d.sessions, x => x.status === 'done')} sessions · ${n(d.runs)} runs · ${n(d.bodyweight)} body weight entries\n\n`
+        + `On this phone now:\n${doneSessions().length} sessions · ${S.runs.length} runs · ${S.bodyweight.length} body weight entries\n\n`
+        + 'Replace ALL data on this phone with the backup?';
+      if (!confirm(msg)) { f.value = ''; return; }
       for (const s of STORES) {
         await db.clear(s);
         if (data.data[s]) await db.putMany(s, data.data[s]);
@@ -933,13 +952,29 @@ const actions = {
     if (isNew) goReplace('#/history'); else goBack('#/history');
   },
   delRun: el => { if (confirm('Delete this run?')) { remove('runs', el.dataset.id); goBack('#/history'); } },
-  exportJson: async () => {
-    const data = {};
-    for (const s of STORES) data[s] = s === 'meta' ? (await db.all('meta')).filter(m => m.id !== 'lastBackup') : S[s];
-    const stamp = nowIso().replace(':', '');
-    downloadFile(`lift-run-journey-backup-${stamp}.json`, JSON.stringify({ app: 'lift-run-journey', version: 1, exportedAt: new Date().toISOString(), data }), 'application/json');
+  // One tap → Android share sheet (Gmail, Drive, WhatsApp…). Falls back to saving the file if sharing is not available.
+  shareBackup: async () => {
+    const { name, json } = backupFile();
+    const file = new File([json], name, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'Lift Run Journey backup' });
+        await setMeta('lastBackup', nowIso());
+        toast('Backup shared'); rerender();
+      } catch (e) {
+        if (e && e.name !== 'AbortError') { downloadFile(name, json, 'application/json'); await setMeta('lastBackup', nowIso()); toast('Sharing failed, saved to phone instead'); rerender(); }
+      }
+      return;
+    }
+    downloadFile(name, json, 'application/json');
     await setMeta('lastBackup', nowIso());
-    toast('Backup exported'); rerender();
+    toast('Saved to Downloads. Move it off the phone (email/Drive).'); rerender();
+  },
+  exportJson: async () => {
+    const { name, json } = backupFile();
+    downloadFile(name, json, 'application/json');
+    await setMeta('lastBackup', nowIso());
+    toast('Backup saved to Downloads'); rerender();
   },
   exportCsv: () => {
     const rows = [];
@@ -987,6 +1022,14 @@ const actions = {
   },
   cancelImport: () => { ui.hevy = null; rerender(); },
 };
+
+// Full backup as JSON (built from memory so the share sheet opens straight from the tap).
+function backupFile() {
+  const data = {};
+  for (const s of STORES) data[s] = s === 'meta' ? Object.entries(S.meta).filter(([k]) => k !== 'lastBackup').map(([id, value]) => ({ id, value })) : S[s];
+  const name = `lift-run-journey-backup-${nowIso().replace(':', '')}.json`;
+  return { name, json: JSON.stringify({ app: 'lift-run-journey', version: 1, appVersion: APP_VERSION, exportedAt: new Date().toISOString(), data }) };
+}
 
 function addEntry(s, exId) {
   const ex = exById(exId);

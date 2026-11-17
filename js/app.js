@@ -14,7 +14,8 @@ const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], me
 let draft = null;          // plan being built
 let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.2';
+const APP_VERSION = 'v2.3';
+let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
 const RUN_TYPES = ['Easy', 'Tempo', 'Interval', 'Long', 'Race', 'Treadmill'];
@@ -691,7 +692,7 @@ routes.more = function more() {
   <a class="card row" href="#/races"><b>Races</b><span class="muted">${S.races.length} ›</span></a>
   <a class="card row" href="#/body"><b>Body weight</b><span class="muted">${S.bodyweight.length} ›</span></a>
   <a class="card row" href="#/import"><b>Import from Hevy</b><span class="muted">›</span></a>
-  <p class="muted small center">Lift Run Journey · offline · ${APP_VERSION}</p>`;
+  <div class="vline"><span class="muted small">Lift Run Journey · ${APP_VERSION}</span><button class="link small" data-act="checkUpdate">Check for updates</button></div>`;
 };
 routes.more.tab = 'more';
 routes.more.after = () => {
@@ -985,6 +986,17 @@ const actions = {
     if (isNew) goReplace('#/history'); else goBack('#/history');
   },
   delRun: el => { if (confirm('Delete this run?')) { remove('runs', el.dataset.id); goBack('#/history'); } },
+  // Replaces pull-to-refresh: ask the browser to look for a new sw.js (~1 KB). A new version installs and the
+  // existing 'controllerchange' listener reloads the app once (never while a session or run is being logged).
+  checkUpdate: async () => {
+    if (!navigator.onLine) { toast('No internet. Try again when you\'re online.'); return; }
+    const reg = swReg || (navigator.serviceWorker ? await navigator.serviceWorker.getRegistration() : null);
+    if (!reg) { toast('Updates are not available here.'); return; }
+    toast('Checking…');
+    try { await reg.update(); } catch (e) { toast('No internet. Try again when you\'re online.'); return; }
+    if (reg.installing || reg.waiting) { toast('Updating…'); return; }
+    toast(`You're on the latest version (${APP_VERSION})`);
+  },
   // One tap → Android share sheet (Gmail, Drive, WhatsApp…). Falls back to saving the file if sharing is not available.
   shareBackup: async () => {
     const { name, json } = backupFile();
@@ -1173,11 +1185,12 @@ document.addEventListener('focusout', ev => {
     $app().innerHTML = `<main><p>Could not open storage: ${esc(e.message)}</p></main>`;
   }
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    const hadController = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    // The very first install (fresh phone) only takes control; every later new version reloads once.
+    let hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').then(r => { swReg = r; }).catch(() => {});
     // New version installed: reload, but never in the middle of logging a session.
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!hadController) return;
+      if (!hadController) { hadController = true; return; }
       if (current?.fn === routes.workout || current?.fn === routes.run) toast('Update ready. It applies next time you open the app.');
       else location.reload();
     });

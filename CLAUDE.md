@@ -1,6 +1,7 @@
 # Working on Lift Run Journey
 
 Read `SPEC.md` first. It holds every product decision made so far. Keep it updated when a decision changes.
+`ROADMAP.md` holds the agreed path to Play Store / App Store; update its status list when a phase is done.
 
 ## Working agreement
 - The owner discusses in Indonesian. Reply in Indonesian; keep the app UI in English.

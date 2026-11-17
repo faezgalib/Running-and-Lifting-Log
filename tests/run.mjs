@@ -241,6 +241,17 @@ async function browserTests() {
     const ver = ((await p.locator('main').innerText()).match(/v\d+\.\d+/) || [''])[0];
     const swv = /VERSION = 'lrj-([\d.]+)'/.exec(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'))?.[1];
     check(`version shown (${ver}) matches sw.js (${swv})`, ver === `v${swv}`);
+
+    section('Updates without pull-to-refresh');
+    check('pull-to-refresh is disabled', await p.evaluate(() => getComputedStyle(document.body).overscrollBehaviorY) === 'contain');
+    await p.click('button[data-act=checkUpdate]');
+    await p.waitForFunction(() => [...document.querySelectorAll('.toast')].some(t => /latest version|Updating/.test(t.textContent)), null, { timeout: 8000 }).catch(() => {});
+    const toasts = await p.locator('.toast').allInnerTexts();
+    check('More → Check for updates reports the latest version', toasts.some(t => t.includes(`You're on the latest version (${ver})`)), toasts.join(' | '));
+    await ctx.setOffline(true);
+    await p.click('button[data-act=checkUpdate]'); await p.waitForTimeout(300);
+    check('Check for updates while offline says "No internet"', (await p.locator('.toast').allInnerTexts()).some(t => /No internet/.test(t)));
+    await ctx.setOffline(false);
     check('no console errors', errors.length === 0, errors.join(' | '));
   } finally {
     await browser.close();

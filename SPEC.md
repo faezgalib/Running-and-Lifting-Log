@@ -69,8 +69,8 @@ Two tabs; **Records** opens first.
 - **Records** (no chart): weighted lifts show the heaviest weight lifted for **at least** N reps (so more reps never shows a heavier weight), rows 1 up to the most reps done (max 20), with the date. Left/right exercises have **Right** and **Left** columns. Reps-only exercises show the most reps in one set, holds the longest hold, distances the farthest. Main sets only (drop sets not counted); imported Hevy sessions count. No colours.
 - **History**: est. 1RM chart (points coloured by location) and the last 10 sessions with location.
 
-## Opening animation
-On each app start (not when returning to Home from another tab): the logo settles in, LIFT RUN JOURNEY fades in while its letter spacing tightens, the green line grows, then the daily line appears (~1.7 s). Buttons work during it. Skipped when the phone asks for reduced motion.
+## Splash screen
+When the app starts, Android shows its own splash: sometimes the Chrome logo first, then the app icon on the dark background, without text. For a web app on Android 12+ this screen can only hold the icon and background colour, so it cannot be changed from the app. A custom splash (logo + LIFT RUN JOURNEY, no Chrome logo) comes with the native app (ROADMAP phase 2). Home itself has no animation, so it appears instantly.
 
 ## Exercise library
 Starter list plus common cable, machine, dumbbell and bodyweight exercises (v2.4, e.g. Seated Cable Row, Face Pull, Leg Extension, Arnold Press, Hip Thrust, Chin Up, Tibialis Raise), each with a muscle-map entry. An exercise the owner typed under a known alias is renamed to the standard name on start, keeping its sets ("row cable" → Seated Cable Row).

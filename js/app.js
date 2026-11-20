@@ -14,7 +14,7 @@ const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], me
 let draft = null;          // plan being built
 let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.4';
+const APP_VERSION = 'v2.5';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
@@ -135,7 +135,6 @@ function route() {
   if (path !== 'races') ui.raceEdit = null;
   ui.picker = null; ui.hist = null;
   render(fn, args);
-  playIntro = false; // only the very first screen after opening the app may animate
   window.scrollTo(0, restoreY != null ? restoreY : 0);
   restoreY = null;
 }
@@ -217,10 +216,8 @@ routes[''] = function home() {
   const km = wkRuns.reduce((a, r) => a + (r.distKm || 0), 0);
   // Home (design option A "Poster"): logo first, daily line second, then actions, this week and a short Recent list.
   const [quote, author] = dailyLine().split(' — ');
-  const intro = playIntro ? ' intro' : '';
-  playIntro = false;
   return `
-  <div class="home${intro}">
+  <div class="home">
   <header class="hero">
     <img src="icons/icon-192.png" alt="" width="104" height="104">
     <div class="brand">LIFT RUN JOURNEY</div>
@@ -247,8 +244,6 @@ routes[''] = function home() {
   ${homeRecent(5)}
   </div>`;
 };
-// The opening animation plays once per app start (not when coming back to Home from another tab).
-let playIntro = true;
 routes[''].tab = '';
 
 const LINES = [

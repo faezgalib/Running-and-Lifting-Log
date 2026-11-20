@@ -212,17 +212,6 @@ h2.sect .small { text-transform: none; letter-spacing: 0; font-weight: 400; marg
 .btn.two .t { font-size: 17px; font-weight: 600; letter-spacing: .02em; }
 .btn.two .s { font-size: 12px; font-weight: 400; opacity: .75; }
 
-/* Opening animation: once per app start; skipped when the phone asks for less motion */
-@media (prefers-reduced-motion: no-preference) {
-  .home.intro .hero img { animation: lrj-logo 700ms cubic-bezier(.2,.7,.2,1) both; }
-  .home.intro .hero .brand { animation: lrj-brand 900ms cubic-bezier(.2,.7,.2,1) 250ms both; }
-  .home.intro .poster .rule { animation: lrj-rule 500ms cubic-bezier(.2,.7,.2,1) 900ms both; }
-  .home.intro .poster .q, .home.intro .poster .by, .home.intro .poster .greet { animation: lrj-fade 600ms cubic-bezier(.2,.7,.2,1) 1150ms both; }
-}
-@keyframes lrj-logo { from { opacity: 0; transform: translateY(10px) scale(.92); } to { opacity: 1; transform: none; } }
-@keyframes lrj-brand { from { opacity: 0; letter-spacing: .7em; } to { opacity: 1; letter-spacing: .34em; } }
-@keyframes lrj-rule { from { width: 0; } to { width: 28px; } }
-@keyframes lrj-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* Exercise panel: Records | History */
 .seg { display: flex; background: var(--surface2); border-radius: 10px; padding: 3px; gap: 3px; margin: 10px 0 6px; }

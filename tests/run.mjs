@@ -106,11 +106,9 @@ async function browserTests() {
     section('Home');
     check('logo is the largest element at the top', await p.evaluate(() => { const i = document.querySelector('.hero img'); return i && i.getBoundingClientRect().width >= 96; }));
     check('daily line shown', (await p.locator('.poster .q').innerText()).length > 5);
-    check('opening animation plays when the app starts', await p.locator('.home.intro').count() === 1);
+    check('Home has no opening animation', await p.evaluate(() => document.getAnimations().length === 0 && !document.querySelector('.home.intro')));
     const btns = (await p.locator('.cta .btn').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
     check('Home buttons: Lift / Run with descriptions', btns[0] === 'Lift Start a session' && btns[1] === 'Run Log a finished run', btns.join(' | '));
-    await tab('More'); await tab('Home');
-    check('no animation when coming back to Home', await p.locator('.home.intro').count() === 0);
 
     section('Import from Hevy (fake data)');
     await tab('More'); await p.click('a[href="#/import"]');

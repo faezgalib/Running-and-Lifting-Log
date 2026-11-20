@@ -6,6 +6,7 @@ export const MUSCLE_NAMES = {
   chest: 'Chest', fdelt: 'Front delts', sdelt: 'Side delts', rdelt: 'Rear delts', biceps: 'Biceps', triceps: 'Triceps',
   forearms: 'Forearms', lats: 'Lats', upperback: 'Upper back', traps: 'Traps', lowback: 'Lower back', abs: 'Abs',
   obliques: 'Obliques', quads: 'Quads', glutes: 'Glutes', hams: 'Hamstrings', calves: 'Calves', adductors: 'Adductors',
+  tibialis: 'Shins',
 };
 
 const PRESS = { chest: 1, triceps: 0.5, fdelt: 0.5 };
@@ -47,7 +48,31 @@ export const MUSCLE_MAP = {
   'Crunch': { abs: 1 }, 'Crunch (Weighted)': { abs: 1 }, 'Lying Leg Raise': { abs: 1 }, 'Flutter Kicks': { abs: 1 },
   'Elbow to Knee': { abs: 1, obliques: 0.5 }, 'Bicycle Crunch': { abs: 1, obliques: 0.5 },
   'Russian Twist (Bodyweight)': { obliques: 1, abs: 0.5 }, 'Russian Twist (Weighted)': { obliques: 1, abs: 0.5 },
+  // v2.4 additions
+  'Seated Cable Row': { lats: 1, upperback: 0.5, biceps: 0.5, rdelt: 0.25 },
+  'Single Arm Cable Row': { lats: 1, upperback: 0.5, biceps: 0.5, rdelt: 0.25 },
+  'Face Pull (Cable)': { rdelt: 1, upperback: 0.5, traps: 0.25 },
+  'Straight-Arm Pulldown (Cable)': { lats: 1 },
+  'Cable Curl': CURL, 'Incline Curl (Dumbbell)': CURL,
+  'Overhead Triceps Extension (Cable)': { triceps: 1 }, 'Skull Crusher (Dumbbell)': { triceps: 1 },
+  'Chest Fly (Cable)': FLY,
+  'Cable Woodchopper': { obliques: 1, abs: 0.5 },
+  'Cable Glute Kickback': { glutes: 1 },
+  'Leg Extension (Machine)': { quads: 1 }, 'Seated Leg Curl (Machine)': { hams: 1 },
+  'Hip Abduction (Machine)': { glutes: 1 }, 'Hip Adduction (Machine)': { adductors: 1 },
+  'Seated Calf Raise (Machine)': { calves: 1 },
+  'Arnold Press (Dumbbell)': { fdelt: 1, sdelt: 0.5, triceps: 0.5 },
+  'Hip Thrust (Dumbbell)': { glutes: 1, hams: 0.5 },
+  'Single Leg Romanian Deadlift (Dumbbell)': { hams: 1, glutes: 0.5, lowback: 0.25 },
+  'Lateral Lunge (Dumbbell)': { quads: 1, adductors: 0.5, glutes: 0.5 },
+  'Shrug (Dumbbell)': { traps: 1, forearms: 0.25 },
+  'Dumbbell Pullover': { lats: 1, chest: 0.5 },
+  'Chin Up': { lats: 1, biceps: 0.5, upperback: 0.5 },
+  'Bench Dip': { triceps: 1, chest: 0.25, fdelt: 0.25 },
+  'Hanging Leg Raise': { abs: 1, forearms: 0.25 }, 'Dead Bug': { abs: 1 }, 'Mountain Climber': { abs: 1 },
+  'Tibialis Raise': { tibialis: 1 },
 };
+const MAP_LC = Object.fromEntries(Object.entries(MUSCLE_MAP).map(([k, v]) => [k.toLowerCase(), v]));
 
 // Fallback for exercises not in the table (e.g. ones created in the app).
 const GROUP_FALLBACK = {
@@ -57,7 +82,7 @@ const GROUP_FALLBACK = {
 
 export function musclesOf(ex) {
   if (!ex || ex.kind === 'mobility') return null;
-  return MUSCLE_MAP[ex.name] || GROUP_FALLBACK[ex.group] || null;
+  return MAP_LC[ex.name.trim().toLowerCase()] || GROUP_FALLBACK[ex.group] || null;
 }
 
 /** sessions: done sessions to include. Returns { muscle: sets }. countSets(entry, ex) gives working sets. */
@@ -83,7 +108,7 @@ export const SHADES = ['#262b33', '#1b3f34', '#24705a', '#3eae86', '#7deac2'];
 
 // Labels: [muscle, anchor x, anchor y, side]
 const LABELS = {
-  front: [['sdelt', 40, 108, 'L'], ['biceps', 42, 154, 'L'], ['forearms', 34, 215, 'L'], ['quads', 66, 290, 'L'],
+  front: [['sdelt', 40, 108, 'L'], ['biceps', 42, 154, 'L'], ['forearms', 34, 215, 'L'], ['quads', 66, 290, 'L'], ['tibialis', 76, 392, 'L'],
           ['fdelt', 144, 96, 'R'], ['chest', 122, 126, 'R'], ['abs', 108, 168, 'R'], ['obliques', 130, 204, 'R'], ['adductors', 106, 268, 'R'], ['calves', 137, 372, 'R']],
   back: [['rdelt', 48, 106, 'L'], ['triceps', 42, 152, 'L'], ['glutes', 72, 250, 'L'], ['hams', 66, 300, 'L'],
          ['traps', 112, 80, 'R'], ['upperback', 128, 114, 'R'], ['lats', 124, 160, 'R'], ['lowback', 108, 214, 'R'], ['calves', 134, 370, 'R']],

@@ -106,6 +106,11 @@ async function browserTests() {
     section('Home');
     check('logo is the largest element at the top', await p.evaluate(() => { const i = document.querySelector('.hero img'); return i && i.getBoundingClientRect().width >= 96; }));
     check('daily line shown', (await p.locator('.poster .q').innerText()).length > 5);
+    check('opening animation plays when the app starts', await p.locator('.home.intro').count() === 1);
+    const btns = (await p.locator('.cta .btn').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
+    check('Home buttons: Lift / Run with descriptions', btns[0] === 'Lift Start a session' && btns[1] === 'Run Log a finished run', btns.join(' | '));
+    await tab('More'); await tab('Home');
+    check('no animation when coming back to Home', await p.locator('.home.intro').count() === 0);
 
     section('Import from Hevy (fake data)');
     await tab('More'); await p.click('a[href="#/import"]');
@@ -126,7 +131,7 @@ async function browserTests() {
     check('"See all" opens History', await where() === '#/history');
 
     section('Plan and log a session');
-    await tab('Home'); await p.click('text=Start session');
+    await tab('Home'); await p.click('button[data-act=newPlan]');
     await p.click('button.chip:has-text("Offshore")');
     check('offshore note about sleep', await p.locator('text=sleep is recorded').count() === 1);
     await p.click('text=+ Add exercise');
@@ -169,9 +174,30 @@ async function browserTests() {
 
     section('Exercise history and Progress');
     await tab('History'); await p.locator('.list a.row[href^="#/session"]').first().click();
-    await p.locator('.exname').first().click();
-    check('exercise history shows sessions with location', await p.locator('.hrow .badge').count() > 0);
-    check('Back closes the history panel', (await back()).startsWith('#/session') && await p.locator('.modal').count() === 0);
+    await p.locator('.exname', { hasText: 'Bench Press' }).first().click();
+    check('exercise panel opens on Records', (await p.locator('.seg button.on').innerText()) === 'Records' && await p.locator('table.rec').count() === 1);
+    const benchHead = await p.locator('table.rec th').allInnerTexts();
+    check('two-handed lift: one Best column', benchHead.map(t => t.toUpperCase()).join('|') === 'REPS|BEST', benchHead.join('|'));
+    const readCol = async (i) => (await p.locator(`table.rec tbody tr td:nth-child(${i + 2})`).allInnerTexts()).map(t => parseFloat(t));
+    const benchBest = await readCol(0);
+    check('records never get heavier as reps go up', benchBest.length > 0 && benchBest.every((v, i) => i === 0 || v <= benchBest[i - 1]), benchBest.join(','));
+    await p.click('.seg button:has-text("History")');
+    check('History tab keeps the sessions with location', await p.locator('.hrow .badge').count() > 0);
+    check('Back closes the panel', (await back()).startsWith('#/session') && await p.locator('.modal').count() === 0);
+    await p.locator('.exname', { hasText: 'Concentration Curl' }).first().click();
+    const ccHead = (await p.locator('table.rec th').allInnerTexts()).map(t => t.toUpperCase());
+    check('left/right exercise: Right and Left columns', ccHead.join('|') === 'REPS|RIGHT|LEFT', ccHead.join('|'));
+    const right = await readCol(0), left = await readCol(1);
+    check('each side never gets heavier as reps go up', [right, left].every(c => c.every((v, i) => i === 0 || v <= c[i - 1])));
+    check('every row has a value for both sides', right.length > 0 && right.length === left.length && !right.concat(left).some(Number.isNaN), `${right} / ${left}`);
+    await back();
+    await tab('Home'); await p.click('button[data-act=newPlan]');
+    await p.click('text=+ Add exercise'); await p.fill('#pickq', 'crunch');
+    await p.locator('.pick', { hasText: /^Crunch/ }).first().click();
+    await p.click('button[data-act=closePicker]');
+    await p.locator('.exname', { hasText: 'Crunch' }).first().click();
+    check('reps-only exercise shows its most reps', /Most reps in one set/.test(await p.locator('.sheetbody').innerText()) && /\d+ reps/.test(await p.locator('table.rec').innerText()));
+    await back(); await back();
     await tab('Progress');
     check('Progress tabs are Lifting | Running', (await p.locator('.tabs button').allInnerTexts()).join('|') === 'Lifting|Running');
     check('Exercise progress comes before Weekly overview', /Exercise progress[\s\S]*Weekly overview/i.test((await p.locator('h2.sect').allInnerTexts()).join(' ')));
@@ -187,8 +213,39 @@ async function browserTests() {
     const fastest = [...pts].sort((a, b) => pace(a.t) - pace(b.t))[0], highest = [...pts].sort((a, b) => a.y - b.y)[0];
     check('fastest run is plotted highest', fastest && highest && fastest.t === highest.t, `${fastest?.t} vs ${highest?.t}`);
 
+    section('New exercises');
+    await tab('Home'); await p.click('button[data-act=newPlan]');
+    await p.click('text=+ Add exercise'); await p.fill('#pickq', 'seated cable');
+    check('Seated Cable Row is in the list', (await p.locator('.pick span:first-child').allInnerTexts()).includes('Seated Cable Row'));
+    await p.fill('#pickq', 'chin up');
+    check('Chin Up is in the list', (await p.locator('.pick span:first-child').allInnerTexts()).includes('Chin Up'));
+    await back(); await back();
+    // A phone that had the owner's own "row cable" before this version: it becomes Seated Cable Row, sets kept.
+    await p.evaluate(() => new Promise((res, rej) => {
+      const r = indexedDB.open('lift-run-journey');
+      r.onsuccess = () => {
+        const db = r.result, t = db.transaction(['exercises', 'sessions'], 'readwrite');
+        const ex = t.objectStore('exercises');
+        ex.getAll().onsuccess = ev => {
+          const std = ev.target.result.find(e => e.name === 'Seated Cable Row');
+          if (std) ex.delete(std.id);
+          ex.put({ id: 'own-row', name: 'row cable', kind: 'lift', format: 'wr', equipment: 'dumbbell', step: 1.5, load: 'single', unilateral: false, perSide: false, group: 'back', repMin: 8, repMax: 12, archived: false });
+          t.objectStore('sessions').put({ id: 'own-row-s', start: '2026-11-20T06:30', end: '2026-11-20T07:10', location: 'Offshore', sleep: null, status: 'done', source: 'app', entries: [{ exId: 'own-row', order: 0, sets: [{ w: 30, r: 10 }, { w: 30, r: 9 }] }] });
+        };
+        t.oncomplete = res; t.onerror = rej;
+      };
+    }));
+    await p.reload(); await p.waitForSelector('.hero');
+    const lib = await p.evaluate(() => new Promise(res => { const r = indexedDB.open('lift-run-journey'); r.onsuccess = () => { r.result.transaction('exercises').objectStore('exercises').getAll().onsuccess = ev => res(ev.target.result); }; }));
+    const rows = lib.filter(e => /row cable|seated cable row/i.test(e.name));
+    check('"row cable" becomes Seated Cable Row (one exercise, cable, 2.5 kg steps)', rows.length === 1 && rows[0].id === 'own-row' && rows[0].name === 'Seated Cable Row' && rows[0].equipment === 'cable' && rows[0].step === 2.5, JSON.stringify(rows.map(e => [e.id, e.name, e.equipment, e.step])));
+    await tab('History'); await p.locator('.list a.row[href="#/session/own-row-s"]').click();
+    await p.click('button.chip:has-text("Back")');
+    check('its logged sets now count as lats in the muscle map', /Lats/.test(await p.locator('.musclemap').textContent()) && await p.evaluate(() => [...document.querySelectorAll('.musclemap path')].some(x => !['#262b33', '#1c2027'].includes(x.getAttribute('fill')))));
+    await back();
+
     section('Run, body weight, navigation');
-    await tab('Home'); await p.click('text=Log run');
+    await tab('Home'); await p.click('button[data-h="#/run/new"]');
     await p.fill('[data-run=distKm]', '4'); await p.fill('[data-run=durSec]', '3000');
     check('"3000" on the number pad → pace 7:30/km', (await p.locator('#pace').innerText()) === '7:30/km');
     await p.click('button:has-text("Save")');

@@ -3,7 +3,7 @@ import {
   uid, esc, isoDate, isoDateTime, parseLocal, fmtDate, fmtShort, fmtTime, fmtDur, parseDur, fmtPace,
   num, fmtKg, e1rm, daysBetween, downloadFile, toCSV,
 } from './util.js';
-import { classify, STARTER, GROUPS, defaultStep, effStep } from './seed.js';
+import { classify, STARTER, GROUPS, defaultStep, effStep, ADDED_V24, ALIASES } from './seed.js';
 import { recommend, learnFactors, repsOf, workingSets, entryBest } from './recommend.js';
 import { convertHevy } from './hevy.js';
 import { lineChart, barChart, legend, LOC_COLORS } from './charts.js';
@@ -14,7 +14,7 @@ const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], me
 let draft = null;          // plan being built
 let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.3';
+const APP_VERSION = 'v2.4';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
@@ -48,6 +48,23 @@ async function migrate() {
     if (g && g.load !== 'single') { g.load = 'single'; await db.put('exercises', g); }
   });
   await db.setMeta('migrations', done); S.meta.migrations = done;
+  await upkeepExercises();
+}
+
+// Runs on every start and is safe to repeat: renames an exercise the owner typed under a known alias
+// (e.g. "row cable" → "Seated Cable Row", keeping its logged sets) and adds any built-in exercise that is missing.
+async function upkeepExercises() {
+  const byName = name => S.exercises.find(e => e.name.trim().toLowerCase() === name.toLowerCase());
+  for (const [alias, canonical] of Object.entries(ALIASES)) {
+    const typed = byName(alias);
+    if (!typed) continue;
+    if (byName(canonical)) continue; // the standard one already exists: leave the owner's copy alone
+    const std = classify(canonical);
+    Object.assign(typed, { ...std, id: typed.id, archived: !!typed.archived, repMin: typed.repMin || std.repMin, repMax: typed.repMax || std.repMax });
+    await db.put('exercises', typed);
+  }
+  const missing = ADDED_V24.filter(n => !byName(n)).map(classify);
+  if (missing.length) { S.exercises.push(...missing); await db.putMany('exercises', missing); }
 }
 
 const save = (store, obj) => {
@@ -118,6 +135,7 @@ function route() {
   if (path !== 'races') ui.raceEdit = null;
   ui.picker = null; ui.hist = null;
   render(fn, args);
+  playIntro = false; // only the very first screen after opening the app may animate
   window.scrollTo(0, restoreY != null ? restoreY : 0);
   restoreY = null;
 }
@@ -199,7 +217,10 @@ routes[''] = function home() {
   const km = wkRuns.reduce((a, r) => a + (r.distKm || 0), 0);
   // Home (design option A "Poster"): logo first, daily line second, then actions, this week and a short Recent list.
   const [quote, author] = dailyLine().split(' — ');
+  const intro = playIntro ? ' intro' : '';
+  playIntro = false;
   return `
+  <div class="home${intro}">
   <header class="hero">
     <img src="icons/icon-192.png" alt="" width="104" height="104">
     <div class="brand">LIFT RUN JOURNEY</div>
@@ -213,8 +234,8 @@ routes[''] = function home() {
   ${act ? `<a class="card resume" href="#/workout/${act.id}"><b>Session in progress</b><span>${locBadge(act.location)} started ${fmtTime(act.start)} · ${act.entries.length} exercises</span><span class="go">Resume →</span></a>` : ''}
   ${nextRace ? `<div class="card race"><div class="big">${daysBetween(today(), nextRace.date)}</div><div><b>days to ${esc(nextRace.name)}</b><span class="muted">${fmtDate(nextRace.date)} · ${nextRace.distKm} km${nextRace.targetSec ? ` · target ${fmtDur(nextRace.targetSec)}` : ''}</span></div></div>` : ''}
   <div class="cta">
-    <button class="btn primary pill" data-act="newPlan">Start session</button>
-    <button class="btn pill outline" data-act="goto" data-h="#/run/new">Log run</button>
+    <button class="btn primary pill two" data-act="newPlan"><span class="t">Lift</span><span class="s">Start a session</span></button>
+    <button class="btn pill outline two" data-act="goto" data-h="#/run/new"><span class="t">Run</span><span class="s">Log a finished run</span></button>
   </div>
   <div class="hh"><span>THIS WEEK</span></div>
   <div class="wk">
@@ -223,8 +244,11 @@ routes[''] = function home() {
     <div><b>${+km.toFixed(1)}</b><span>km run</span></div>
   </div>
   <div class="hh"><span>RECENT</span><a href="#/history">See all</a></div>
-  ${homeRecent(5)}`;
+  ${homeRecent(5)}
+  </div>`;
 };
+// The opening animation plays once per app start (not when coming back to Home from another tab).
+let playIntro = true;
 routes[''].tab = '';
 
 const LINES = [
@@ -399,14 +423,74 @@ function histHtml() {
       <div class="small">${e.sets.map(x => fmtSet(x, ex)).join(' · ')}</div>
       <div class="hmeta">${est}${rir ? `<span class="muted small">${rir.rir === 3 ? '3+' : rir.rir} left</span>` : ''}</div></div>`;
   }).join('');
-  return `<div class="modal" data-act="closeHist"><div class="sheet hist" data-act="noop">
+  const tab = ui.histTab === 'history' ? 'history' : 'records';
+  const seg = `<div class="seg">${[['records', 'Records'], ['history', 'History']].map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="histTab" data-k="${k}">${l}</button>`).join('')}</div>`;
+  const head = `<div class="modal" data-act="closeHist"><div class="sheet hist" data-act="noop">
     <div class="sheethead"><b class="grow">${esc(ex.name)}</b><button class="btn small" data-act="closeHist">Close</button></div>
-    <div class="sheetbody">
+    <div class="sheetbody">${seg}`;
+  if (tab === 'records') return `${head}${recordsHtml(ex)}</div></div></div>`;
+  return `${head}
       ${pts.length > 1 ? lineChart([{ name: ex.name, color: 'var(--muted)', points: pts }], { yLabel: ex.format === 'wr' ? 'est. 1RM' : 'best reps', height: 140 }) + legend(LOCS.map(l => [l, LOC_COLORS[l]])) : ''}
       <h3>Last ${rows.length} session${rows.length === 1 ? '' : 's'}</h3>
       ${list || '<p class="muted">No history yet.</p>'}
       <button class="btn ghost wide" data-act="histToProgress" data-id="${ex.id}">Full chart in Progress</button>
     </div></div></div>`;
+}
+
+// ---------- set records ----------
+// Weighted lifts: heaviest weight lifted for AT LEAST n reps (so more reps never shows a heavier weight),
+// per side for left/right exercises. Reps-only: most reps in one set. Hold: longest. Distance: farthest.
+// Main sets only (drop sets are not counted). Imported Hevy sessions count too.
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const recDate = iso => { const d = parseLocal(iso); return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`; };
+
+function computeRecords(ex, sessions) {
+  const sets = [];
+  for (const s of sessions) {
+    if (s.status !== 'done') continue;
+    const e = s.entries.find(x => x.exId === ex.id);
+    if (e) for (const st of e.sets) sets.push({ ...st, date: s.start });
+  }
+  const two = ex.unilateral || ex.perSide;
+  const sidesList = two ? [['R', 'Right'], ['L', 'Left']] : [['', '']];
+  const repsFor = (st, k) => (k === 'R' ? st.rR ?? st.r : k === 'L' ? st.rL ?? st.r : st.r);
+  // pick: the best value, and the earliest date it was reached
+  const best = (cands, val) => cands.reduce((b, c) => (!b || val(c) > val(b) || (val(c) === val(b) && c.date < b.date) ? c : b), null);
+  if (ex.format === 'wr' && sets.some(st => st.w > 0)) {
+    const per = sidesList.map(([k]) => sets.filter(st => st.w > 0 && repsFor(st, k) > 0).map(st => ({ w: st.w, n: repsFor(st, k), date: st.date })));
+    const maxN = Math.min(20, Math.max(0, ...per.flat().map(x => x.n)));
+    const rows = [];
+    for (let n = 1; n <= maxN; n++) {
+      rows.push({ reps: n, cells: per.map(list => { const b = best(list.filter(x => x.n >= n), x => x.w); return b ? { value: b.w, date: b.date } : null; }) });
+    }
+    return { type: 'weight', sides: sidesList.map(([, l]) => l), rows };
+  }
+  const field = ex.format === 'hold' ? 'sec' : ex.format === 'dist' ? 'm' : 'r';
+  const valFor = (st, k) => (k === 'R' ? st[field + 'R'] ?? st[field] : k === 'L' ? st[field + 'L'] ?? st[field] : st[field]);
+  const cells = sidesList.map(([k]) => {
+    const b = best(sets.filter(st => valFor(st, k) > 0), st => valFor(st, k));
+    return b ? { value: valFor(b, k), date: b.date } : null;
+  });
+  return { type: field === 'sec' ? 'hold' : field === 'm' ? 'dist' : 'reps', sides: sidesList.map(([, l]) => l), cells };
+}
+
+function recordsHtml(ex) {
+  const rec = computeRecords(ex, S.sessions);
+  const two = rec.sides.length === 2;
+  const cell = (c, unit) => (c ? `<td class="kg">${unit(c.value)}<small>${recDate(c.date)}</small></td>` : '<td class="kg">–</td>');
+  if (rec.type === 'weight') {
+    if (!rec.rows.length) return '<p class="muted">No sets with weight yet.</p>';
+    const kg = v => `${fmtKg(v)} ${unitW(ex)}`;
+    return `<p class="hint">Heaviest weight you lifted for at least this many reps${two ? ', per side' : ''}.</p>
+      <table class="rec"><thead><tr><th>Reps</th>${two ? '<th>Right</th><th>Left</th>' : '<th>Best</th>'}</tr></thead>
+      <tbody>${rec.rows.map(r => `<tr><td class="r">${r.reps}</td>${r.cells.map(c => cell(c, kg)).join('')}</tr>`).join('')}</tbody></table>`;
+  }
+  if (!rec.cells.some(Boolean)) return '<p class="muted">No sets yet.</p>';
+  const label = { reps: 'Most reps in one set', hold: 'Longest hold', dist: 'Farthest' }[rec.type];
+  const unit = { reps: v => `${v} reps`, hold: v => fmtDur(v), dist: v => `${v} m` }[rec.type];
+  return `<p class="hint">${label}${two ? ', per side' : ''}.</p>
+    <table class="rec"><thead><tr>${two ? '<th>Right</th><th>Left</th>' : '<th>Best</th>'}</tr></thead>
+    <tbody><tr>${rec.cells.map(c => cell(c, unit)).join('')}</tr></tbody></table>`;
 }
 
 // ---------- WORKOUT (active or editing) ----------
@@ -887,7 +971,8 @@ const actions = {
     }
     rerender();
   },
-  showHist: el => { ui.hist = el.dataset.id; openSheet(); rerender(); },
+  showHist: el => { ui.hist = el.dataset.id; ui.histTab = 'records'; openSheet(); rerender(); },
+  histTab: el => { ui.histTab = el.dataset.k; rerender(); },
   closeHist: () => closeSheet(),
   noop: () => {},
   ptab: el => { ui.ptab = el.dataset.k; rerender(); },

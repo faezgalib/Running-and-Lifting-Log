@@ -1,7 +1,7 @@
 // Offline cache. Bump VERSION whenever app files change so phones pick up the update.
 // Cache-first: the app opens from the phone and uses no data. The browser only re-checks this
 // small file (~1 KB); the full app (~120 KB) is downloaded again only when VERSION changes.
-const VERSION = 'lrj-2.3';
+const VERSION = 'lrj-2.4';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/db.js', 'js/util.js', 'js/seed.js', 'js/recommend.js', 'js/hevy.js', 'js/charts.js', 'js/muscles.js',

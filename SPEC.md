@@ -64,8 +64,16 @@ Logged inside any session. Formats: reps / hold / distance, optional per side. N
 ## Body weight
 Optional log at any time.
 
-## Exercise history
-Tap an exercise name (plan, session, summary) → last 10 sessions of that exercise with date, location, sets, est. 1RM and reps in reserve, plus a small chart.
+## Exercise panel (tap any exercise name: plan, session, summary)
+Two tabs; **Records** opens first.
+- **Records** (no chart): weighted lifts show the heaviest weight lifted for **at least** N reps (so more reps never shows a heavier weight), rows 1 up to the most reps done (max 20), with the date. Left/right exercises have **Right** and **Left** columns. Reps-only exercises show the most reps in one set, holds the longest hold, distances the farthest. Main sets only (drop sets not counted); imported Hevy sessions count. No colours.
+- **History**: est. 1RM chart (points coloured by location) and the last 10 sessions with location.
+
+## Opening animation
+On each app start (not when returning to Home from another tab): the logo settles in, LIFT RUN JOURNEY fades in while its letter spacing tightens, the green line grows, then the daily line appears (~1.7 s). Buttons work during it. Skipped when the phone asks for reduced motion.
+
+## Exercise library
+Starter list plus common cable, machine, dumbbell and bodyweight exercises (v2.4, e.g. Seated Cable Row, Face Pull, Leg Extension, Arnold Press, Hip Thrust, Chin Up, Tibialis Raise), each with a muscle-map entry. An exercise the owner typed under a known alias is renamed to the standard name on start, keeping its sets ("row cable" → Seated Cable Row).
 
 ## Exercise picker
 **Recent** (5 most recently used) on top, clearly labelled. Everything else A–Z, grouped Lifts / Core / Mobility. Searching shows A–Z only.
@@ -122,7 +130,7 @@ Design option A ("Poster"), Android system font, same colours as the rest of the
 - **Daily line** second: thin type, centred, with the author in small green capitals. Sundays always show "No human is limited. — Eliud Kipchoge".
 - Greeting by time of day and a last-30-days line (sessions and km).
 - Resume card (session in progress) and next race countdown when they apply.
-- Start session / Log run, This week (sessions, working sets, km), and **Recent**: at most 5 rows, date on the left, one short line each ("6 exercises · 14 sets" / "4 km · 7:30/km"), location as a coloured dot, "See all" → History.
+- **Lift** ("Start a session") / **Run** ("Log a finished run"), This week (sessions, working sets, km), and **Recent**: at most 5 rows, date on the left, one short line each ("6 exercises · 14 sets" / "4 km · 7:30/km"), location as a coloured dot, "See all" → History.
 - Tone: positive. No warnings or negative messages on the home screen.
 
 ## Updates and data use

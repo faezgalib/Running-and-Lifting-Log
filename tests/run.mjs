@@ -8,7 +8,7 @@ import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { sampleHevyCsv, OFFSHORE_PERIOD } from './fixtures.mjs';
-import { recommend, workingSets, entryBest, heaviestSet, setsLine } from '../js/recommend.js';
+import { recommend, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict } from '../js/recommend.js';
 import { classify } from '../js/seed.js';
 import { parseDur, fmtDur } from '../js/util.js';
 import { muscleVolume } from '../js/muscles.js';
@@ -62,6 +62,22 @@ function unitTests() {
   check('recent line groups by weight', setsLine({ sets: [{ w: 47.5, r: 10 }, { w: 47.5, r: 10 }, { w: 45, r: 11 }] }, press) === '47.5 kg × 10, 10 · 45 kg × 11', setsLine({ sets: [{ w: 47.5, r: 10 }, { w: 47.5, r: 10 }, { w: 45, r: 11 }] }, press));
   check('recent line shows right/left', setsLine({ sets: [{ w: 12, rR: 10, rL: 9 }, { w: 12, rR: 9, rL: 9 }] }, cc) === '12 kg × R10/L9, R9/L9', setsLine({ sets: [{ w: 12, rR: 10, rL: 9 }, { w: 12, rR: 9, rL: 9 }] }, cc));
   check('bodyweight sets: reps only, no 0 kg', heaviestSet({ sets: [{ w: 0, r: 10 }] }, press) === null && setsLine({ sets: [{ r: 10 }, { r: 8 }] }, press) === '10, 8 reps');
+
+  section('Line after Finish');
+  const exs = { [press.id]: press, [cc.id]: cc };
+  const day = (id, start, sets, target) => ({ id, start, status: 'done', location: 'Gym', entries: [{ exId: press.id, sets, target }] });
+  const old = day('a', '2026-11-01T07:00', [{ w: 50, r: 10 }, { w: 50, r: 9 }]);
+  const tgt = { kind: 'rec', weight: 50, reps: 10, repsBySet: [10, 10], sets: 2 };
+  let v = sessionVerdict(day('b', '2026-11-08T07:00', [{ w: 52.5, r: 8 }, { w: 50, r: 10 }]), [old], id => exs[id]);
+  check('heavier than before → "You beat it today." with the new best', v.title === 'You beat it today.' && v.best.w === 52.5 && v.best.r === 8, JSON.stringify(v));
+  v = sessionVerdict(day('b', '2026-11-08T07:00', [{ w: 50, r: 11 }, { w: 50, r: 9 }]), [old], id => exs[id]);
+  check('more reps at the same top weight → beat it', v.kind === 'best' && v.best.r === 11, JSON.stringify(v));
+  v = sessionVerdict(day('b', '2026-11-08T07:00', [{ w: 50, r: 10 }, { w: 50, r: 10 }], tgt), [old], id => exs[id]);
+  check('all targets hit, no new best → "You nailed it."', v.title === 'You nailed it.', JSON.stringify(v));
+  v = sessionVerdict(day('b', '2026-11-08T07:00', [{ w: 50, r: 8 }, { w: 50, r: 7 }], tgt), [old], id => exs[id]);
+  check('targets missed → still positive "Done. Every session counts."', v.title === 'Done. Every session counts.', JSON.stringify(v));
+  v = sessionVerdict(day('b', '2026-11-08T07:00', [{ w: 30, r: 10 }]), [], id => exs[id]);
+  check('first time doing an exercise is not called a new best', v.kind === 'done', JSON.stringify(v));
 
   section('Duration typing');
   const cases = { '003000': '30:00', '3000': '30:00', '4530': '45:30', '13000': '1:30:00', '45': '45:00', '45:30': '45:30', '1:30:00': '1:30:00' };
@@ -176,11 +192,15 @@ async function browserTests() {
     await p.click('.card.resume'); await p.click('button:has-text("Finish")');
     await p.waitForSelector('.musclemap');
     check('summary shows the muscle map without numbers', !/\bsets?\b/.test(await p.locator('.musclemap').textContent()));
+    const ackText = await p.locator('.ack .big').innerText().catch(() => '');
+    check('positive line after Finish', ['You beat it today.', 'You nailed it.', 'Done. Every session counts.'].includes(ackText), ackText);
+    check('line sits above the muscle map', await p.evaluate(() => { const a = document.querySelector('.ack'), m = document.querySelector('.musclemap'); return !!a && !!m && (a.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING) > 0; }));
     check('summary keeps the drop set (R/L)', (await p.locator('main').innerText()).includes('8×R6/L5'));
     check('Back after Finish goes Home (not to the finished session)', await back() === '#/');
 
     section('Exercise history and Progress');
     await tab('History'); await p.locator('.list a.row[href^="#/session"]').first().click();
+    check('old session from History has no "after Finish" line', await p.locator('.ack').count() === 0);
     await p.locator('.exname', { hasText: 'Bench Press' }).first().click();
     check('exercise panel opens on Records', (await p.locator('.seg button.on').innerText()) === 'Records' && await p.locator('table.rec').count() === 1);
     const benchHead = await p.locator('table.rec th').allInnerTexts();
@@ -228,9 +248,9 @@ async function browserTests() {
     await p.click('.tabs button:has-text("Running")');
     check('pace chart marked "faster ↑"', await p.locator('text=faster ↑').count() === 1);
     const runFills = await p.locator('section.card:has(h3:text("Running km per week")) rect').evaluateAll(rs => [...new Set(rs.map(r => r.getAttribute('fill')))]);
-    check('running charts use the app green', runFills.join() === 'var(--accent)', runFills.join());
-    const paceFills = await p.locator('section.card:has(h3:text("Pace")) circle').evaluateAll(cs => [...new Set(cs.map(c => c.getAttribute('fill') === 'var(--surface)' ? c.getAttribute('stroke') : c.getAttribute('fill')))]);
-    check('run type shown by shape, not location colours', paceFills.join() === 'var(--accent)', paceFills.join());
+    check('km per week bars use the app green', runFills.join() === 'var(--accent)', runFills.join());
+    const paceFills = await p.locator('section.card:has(h3:text("Pace")) circle').evaluateAll(cs => [...new Set(cs.map(c => c.getAttribute('fill')))]);
+    check('pace keeps its run-type colours', paceFills.length > 0 && paceFills.every(f => ['var(--home)', 'var(--gym)', 'var(--off)'].includes(f)), paceFills.join());
     const pts = await p.locator('section.card:has(h3:text("Pace")) circle').evaluateAll(cs => cs.map(c => ({ y: +c.getAttribute('cy'), t: c.textContent })));
     const pace = t => { const m = /(\d+):(\d+)\/km/.exec(t); return m ? +m[1] * 60 + +m[2] : 0; };
     const fastest = [...pts].sort((a, b) => pace(a.t) - pace(b.t))[0], highest = [...pts].sort((a, b) => a.y - b.y)[0];

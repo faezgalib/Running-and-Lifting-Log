@@ -225,7 +225,7 @@ table.rec td.r { width: 52px; color: var(--muted); }
 table.rec td.kg { font-weight: 600; font-size: 15px; }
 table.rec td.kg small { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); margin-top: 1px; }
 
-/* v2.6 Progress: centred Weight / Est. 1RM, tap a chart point, recent sessions, run legend shapes */
+/* v2.6 Progress: centred Weight / Est. 1RM, tap a chart point, recent sessions */
 .chips.center { justify-content: center; gap: 8px; }
 .chips.center .chip { min-width: 120px; text-align: center; }
 .chartbox { position: relative; }
@@ -237,7 +237,8 @@ table.rec td.kg small { display: block; font-weight: 400; font-size: 11.5px; col
 .rs .d { color: var(--muted); font-size: 13px; }
 .rs .l { font-size: 12px; color: var(--muted); }
 .rs .l i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
-.legend.shapes i { width: 9px; height: 9px; border-radius: 50%; box-sizing: border-box; }
-.legend.shapes i.dot { background: var(--accent); }
-.legend.shapes i.hollow { border: 1.5px solid var(--accent); background: transparent; }
-.legend.shapes i.ring { width: 11px; height: 11px; background: var(--accent); border: 1.5px solid var(--text); vertical-align: -1px; }
+/* Positive line right after Finish (above the muscle map) */
+.ack { text-align: center; padding: 14px 4px 6px; }
+.ack .big { font-size: 24px; font-weight: 650; letter-spacing: -.01em; }
+.ack .line { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.ack .pr { display: inline-block; margin-top: 8px; font-size: 12.5px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 999px; padding: 3px 10px; }

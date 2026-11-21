@@ -58,6 +58,13 @@ Manual entry (~30 s): date, type (Easy, Tempo, Interval, Long, Race, Treadmill),
 Duration can be typed on the number pad without ":" — read like a stopwatch: `4530` = 45:30, `003000` = 0:30:00, `13000` = 1:30:00, `45` = 45 min. The field shows the parsed h:mm:ss after leaving it.
 Races: name, date, distance, target time, linked result → countdown on home screen.
 
+## After Finish
+Right after Finish, a short positive line sits above the muscle map, with "N exercises · N sets · N min" under it. It is chosen from the session, always positive:
+- **You beat it today.** — a lift beat its previous best (heavier than ever, or more reps at the same top weight), with a small "New best · exercise weight × reps". A first-ever exercise does not count.
+- **You nailed it.** — every planned target was hit.
+- **Done. Every session counts.** — any other day (a miss is never mentioned).
+It shows only once; opening the session later from History does not show it. The muscle map itself is unchanged.
+
 ## Mobility and core
 Logged inside any session. Formats: reps / hold / distance, optional per side. No progression recommendation.
 
@@ -89,7 +96,7 @@ Two tabs so charts never mix: **Lifting | Running**.
 - **Lifting**, in two titled sections:
   - **Exercise progress** (top, used most): one exercise chosen from a searchable A–Z list. Two centred buttons of equal width: **Weight** (opens first) = the heaviest weight actually lifted in each session, and **Est. 1RM**. Points are coloured by location. Tap the chart to see the nearest point's date and weight × reps (phones have no hover). Below the chart, **Recent sessions**: the last 5 sessions with weight × reps per set ("47.5 kg × 10, 10 · 45 kg × 11"; left/right as "R10/L9"), location and set count; tap a row to open the session. Left vs Right chart for unilateral exercises.
   - **Weekly overview** (all exercises): muscle map (this week / last week), working sets per week.
-- **Running**: km per week, and pace for every run. The pace axis is inverted (faster = higher, marked "faster ↑"). One colour (the app green); the run type is shown by the point's shape: filled = Outdoor, hollow = Treadmill, large with a white ring = Race. Blue / orange / red mean location only (Home / Gym / Offshore), never anything else.
+- **Running**: km per week, and pace for every run. The pace axis is inverted (faster = higher, marked "faster ↑"). Km per week bars use the app green. Pace points keep their run-type colours (Outdoor blue, Treadmill orange, Race red).
 
 Body weight lives in **More → Body weight**: chart, quick add, and the list of entries.
 

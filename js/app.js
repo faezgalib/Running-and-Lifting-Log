@@ -4,7 +4,7 @@ import {
   num, fmtKg, e1rm, daysBetween, downloadFile, toCSV,
 } from './util.js';
 import { classify, STARTER, GROUPS, defaultStep, effStep, ADDED_V24, ALIASES } from './seed.js';
-import { recommend, learnFactors, repsOf, workingSets, entryBest, heaviestSet, setsLine } from './recommend.js';
+import { recommend, learnFactors, repsOf, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict } from './recommend.js';
 import { convertHevy } from './hevy.js';
 import { lineChart, barChart, legend, LOC_COLORS, chartTap } from './charts.js';
 import { muscleVolume, muscleFigure, shadeLegend } from './muscles.js';
@@ -133,6 +133,7 @@ function route() {
   const fn = routes[path] || routes[''];
   if (path !== 'run') ui.runEdit = null;
   if (path !== 'races') ui.raceEdit = null;
+  if (path !== 'session' || args[0] !== ui.justFinished) ui.justFinished = null; // the "You nailed it" line shows once, right after Finish
   ui.picker = null; ui.hist = null;
   render(fn, args);
   window.scrollTo(0, restoreY != null ? restoreY : 0);
@@ -600,11 +601,22 @@ routes.session = function session(id) {
     <label>Location</label>${chips(`sloc:${s.id}`, LOCS.map(l => [l, l]), s.location)}
     <p class="muted small">${fmtTime(s.start)}${dur ? ` · ${fmtDur(dur)}` : ''}${s.sleep != null ? ` · sleep ${s.sleep >= 8 ? '8+' : s.sleep} h` : ''}${s.source === 'hevy' ? ' · imported from Hevy' : ''}</p>
   </section>
+  ${ui.justFinished === s.id ? ackHtml(s, dur) : ''}
   ${musclesCard([s], 'Muscles worked', [1, 2, 3], 'sets this session')}
   ${body}
   <div class="actions"><button class="btn" data-act="goto" data-h="#/workout/${s.id}">Edit sets</button><button class="btn danger" data-act="delSession" data-id="${s.id}">Delete</button></div>
   ${histHtml()}`;
 };
+
+// Positive line above the muscle map, only right after Finish.
+function ackHtml(s, dur) {
+  const v = sessionVerdict(s, S.sessions, exById);
+  const n = s.entries.length;
+  const sets = s.entries.reduce((a, e) => { const ex = exById(e.exId); return a + (ex ? workingSets(e, ex).length : 0); }, 0);
+  const mins = dur >= 60 ? ` · ${Math.round(dur / 60)} min` : '';
+  const pr = v.best ? `<div class="pr">New best · ${esc(v.best.name)} ${v.best.w ? `${fmtKg(v.best.w)} kg × ${v.best.r}` : `${v.best.r} reps`}</div>` : '';
+  return `<div class="ack ${v.kind}"><div class="big">${v.title}</div><div class="line">${n} exercise${n === 1 ? '' : 's'} · ${sets} set${sets === 1 ? '' : 's'}${mins}</div>${pr}</div>`;
+}
 
 // ---------- muscle map card ----------
 const countSets = (e, ex) => workingSets(e, ex).length;
@@ -729,8 +741,7 @@ routes.progress = function progress() {
   });
   const kmPerWeek = Object.fromEntries(weeks.map(w => [w, 0]));
   S.runs.forEach(r => { const wk = weekKey(r.date); if (wk in kmPerWeek) kmPerWeek[wk] += r.distKm || 0; });
-  // One colour for running; the run type is shown by the point's shape (location colours stay for lifting).
-  const paces = S.runs.filter(r => r.distKm > 0 && r.durSec > 0).map(r => ({ x: parseLocal(r.date), y: r.durSec / r.distKm, color: 'var(--accent)', shape: r.type === 'Race' ? 'ring' : r.type === 'Treadmill' ? 'hollow' : 'dot', label: `${fmtShort(r.date)} ${r.type} ${r.distKm} km ${fmtPace(r.durSec, r.distKm)}` }));
+  const paces = S.runs.filter(r => r.distKm > 0 && r.durSec > 0).map(r => ({ x: parseLocal(r.date), y: r.durSec / r.distKm, color: r.type === 'Race' ? 'var(--off)' : r.type === 'Treadmill' ? 'var(--gym)' : 'var(--home)', label: `${fmtShort(r.date)} ${r.type} ${r.distKm} km ${fmtPace(r.durSec, r.distKm)}` }));
 
   const wkOff = ui.mweek || 0;
   const wkStart = lastWeeks(wkOff + 1)[0];
@@ -754,8 +765,8 @@ routes.progress = function progress() {
     ${barChart(weeks.map(w => ({ label: fmtShort(w), value: +kmPerWeek[w].toFixed(1) })), { color: 'var(--accent)' })}
   </section>
   <section class="card"><h3>Pace</h3>
-    ${lineChart([{ name: 'pace', color: 'var(--accent)', points: paces }], { yLabel: 'min/km', yFmt: v => fmtDur(v), invert: true, cornerNote: 'faster ↑' })}
-    <div class="legend shapes"><span><i class="dot"></i>Outdoor</span><span><i class="hollow"></i>Treadmill</span><span><i class="ring"></i>Race</span></div>
+    ${lineChart([{ name: 'pace', color: 'var(--muted)', points: paces }], { yLabel: 'min/km', yFmt: v => fmtDur(v), invert: true, cornerNote: 'faster ↑' })}
+    ${legend([['Outdoor', 'var(--home)'], ['Treadmill', 'var(--gym)'], ['Race', 'var(--off)']])}
   </section>`;
   return `<header class="top"><h1>Progress</h1></header>
   <div class="tabs">${[['lifts', 'Lifting'], ['running', 'Running']].map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="ptab" data-k="${k}">${l}</button>`).join('')}</div>
@@ -1061,6 +1072,7 @@ const actions = {
     if (!s.entries.length) { if (confirm('No sets logged. Discard this session?')) { remove('sessions', s.id); goTab('#/'); } return; }
     s.status = 'done'; s.end = nowIso();
     save('sessions', s);
+    ui.justFinished = s.id;
     goReplace(`#/session/${s.id}`);
     toast('Session saved');
   },

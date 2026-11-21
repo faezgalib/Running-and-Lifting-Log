@@ -45,6 +45,46 @@ export function setsLine(entry, ex, unit = 'kg') {
   return groups.map(g => (g.w ? `${+g.w.toFixed(2)} ${unit} × ${g.reps.join(', ')}` : `${g.reps.join(', ')} reps`)).join(' · ');
 }
 
+// How many working sets met the planned target (weight and per-set reps).
+export function targetHits(entry, ex) {
+  const t = entry.target;
+  if (!t || t.kind !== 'rec') return null;
+  const per = t.repsBySet || [];
+  const hit = workingSets(entry, ex).filter((x, i) => (x.w || 0) >= (t.weight || 0) && repsOf(x, ex) >= (per[Math.min(i, per.length - 1)] ?? t.reps)).length;
+  return { hit, sets: t.sets };
+}
+
+// Positive line shown right after Finish. Always positive, never mentions a miss.
+//  'best'   → a lift beat its previous best (heavier, or more reps at the same top weight) → "You beat it today."
+//  'nailed' → every planned target was hit                                                → "You nailed it."
+//  'done'   → anything else                                                               → "Done. Every session counts."
+export function sessionVerdict(session, sessions, exById) {
+  const before = sessions.filter(x => x.status === 'done' && x.id !== session.id && x.start < session.start);
+  let best = null, targets = 0, allHit = true;
+  for (const e of session.entries) {
+    const ex = exById(e.exId);
+    if (!ex || ex.kind !== 'lift') continue;
+    const th = targetHits(e, ex);
+    if (th) { targets++; if (th.hit < th.sets) allHit = false; }
+    if (best) continue;
+    const prev = before.map(x => x.entries.find(y => y.exId === ex.id)).filter(y => y && workingSets(y, ex).length);
+    if (!prev.length) continue; // first time is not "beating" anything
+    const now = heaviestSet(e, ex);
+    if (now) {
+      const pw = Math.max(0, ...prev.map(y => heaviestSet(y, ex)?.w || 0));
+      const pr = Math.max(0, ...prev.flatMap(y => workingSets(y, ex).filter(s => (s.w || 0) === pw).map(s => repsOf(s, ex))));
+      if (now.w > pw || (now.w === pw && now.r > pr)) best = { name: ex.name, w: now.w, r: now.r };
+    } else {
+      const r = Math.max(0, ...workingSets(e, ex).map(s => repsOf(s, ex)));
+      const pr = Math.max(0, ...prev.flatMap(y => workingSets(y, ex).map(s => repsOf(s, ex))));
+      if (r > pr) best = { name: ex.name, w: 0, r };
+    }
+  }
+  if (best) return { kind: 'best', title: 'You beat it today.', best };
+  if (targets && allHit) return { kind: 'nailed', title: 'You nailed it.' };
+  return { kind: 'done', title: 'Done. Every session counts.' };
+}
+
 // Done sessions that contain the exercise, newest first.
 export function historyFor(exId, sessions, beforeIso) {
   return sessions

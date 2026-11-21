@@ -22,6 +22,89 @@ export function entryBest(entry, ex) {
   return best;
 }
 
+// Heaviest weight actually lifted in a session (main sets only); ties go to more reps.
+export function heaviestSet(entry, ex) {
+  let top = null;
+  for (const s of workingSets(entry, ex)) {
+    const w = s.w || 0, r = repsOf(s, ex);
+    if (w > 0 && (!top || w > top.w || (w === top.w && r > top.r))) top = { w, r };
+  }
+  return top;
+}
+
+// One line per session for weight + reps exercises, grouped by weight in set order:
+// "47.5 kg × 10, 10 · 45 kg × 11"; left/right as "R10/L9". Bodyweight sets show reps only.
+export function setsLine(entry, ex, unit = 'kg') {
+  const two = ex.unilateral || ex.perSide;
+  const reps = s => (two && (s.rL != null || s.rR != null) ? `R${s.rR ?? '–'}/L${s.rL ?? '–'}` : `${s.r ?? '–'}`);
+  const groups = [];
+  for (const s of workingSets(entry, ex)) {
+    const w = s.w || 0, g = groups[groups.length - 1];
+    if (g && g.w === w) g.reps.push(reps(s)); else groups.push({ w, reps: [reps(s)] });
+  }
+  return groups.map(g => (g.w ? `${+g.w.toFixed(2)} ${unit} × ${g.reps.join(', ')}` : `${g.reps.join(', ')} reps`)).join(' · ');
+}
+
+// How many working sets met the planned target (weight and per-set reps).
+export function targetHits(entry, ex) {
+  const t = entry.target;
+  if (!t || t.kind !== 'rec') return null;
+  const per = t.repsBySet || [];
+  const hit = workingSets(entry, ex).filter((x, i) => (x.w || 0) >= (t.weight || 0) && repsOf(x, ex) >= (per[Math.min(i, per.length - 1)] ?? t.reps)).length;
+  return { hit, sets: t.sets };
+}
+
+// ---------- personal bests ----------
+// A set beats a record when it is heavier, or has more reps at the same weight (weaker side for left/right).
+const beats = (a, b) => !b || a.w > b.w || (a.w === b.w && a.r > b.r);
+const score = (s, ex) => ({ w: s.w || 0, r: repsOf(s, ex) });
+
+// Best set of an exercise in done sessions before this one, or null if never done.
+export function bestBefore(ex, sessions, session) {
+  let best = null;
+  for (const x of sessions) {
+    if (x.status !== 'done' || x.id === session.id || !(x.start < session.start)) continue;
+    const e = x.entries.find(y => y.exId === ex.id);
+    if (!e) continue;
+    for (const st of workingSets(e, ex)) { const sc = score(st, ex); if (beats(sc, best)) best = { ...sc, set: st, date: x.start }; }
+  }
+  return best;
+}
+
+// Indexes (into `sets`) of the sets that set a new personal best, in order. Nothing if there is no earlier record.
+export function pbSets(sets, ex, prev) {
+  if (!prev) return [];
+  let best = prev; const out = [];
+  sets.forEach((st, i) => {
+    const r = repsOf(st, ex);
+    if (r == null || r <= 0) return;
+    const sc = score(st, ex);
+    if (beats(sc, best)) { out.push(i); best = sc; }
+  });
+  return out;
+}
+
+// Positive line shown right after Finish. Always positive, never mentions a miss.
+//  'best'   → at least one lift set a personal best → "You beat it today." (+ the personal best card)
+//  'nailed' → every planned target was hit         → "You nailed it."
+//  'done'   → anything else                        → "Done. Every session counts."
+export function sessionVerdict(session, sessions, exById) {
+  const bests = [];
+  let targets = 0, allHit = true;
+  for (const e of session.entries) {
+    const ex = exById(e.exId);
+    if (!ex || ex.kind !== 'lift') continue;
+    const th = targetHits(e, ex);
+    if (th) { targets++; if (th.hit < th.sets) allHit = false; }
+    const prev = bestBefore(ex, sessions, session);
+    const idx = pbSets(e.sets || [], ex, prev);
+    if (idx.length) { const set = e.sets[idx[idx.length - 1]]; bests.push({ name: ex.name, ex, set, ...score(set, ex), prev }); }
+  }
+  if (bests.length) return { kind: 'best', title: 'You beat it today.', bests, best: bests[0] };
+  if (targets && allHit) return { kind: 'nailed', title: 'You nailed it.', bests };
+  return { kind: 'done', title: 'Done. Every session counts.', bests };
+}
+
 // Done sessions that contain the exercise, newest first.
 export function historyFor(exId, sessions, beforeIso) {
   return sessions

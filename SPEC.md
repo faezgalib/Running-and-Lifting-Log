@@ -58,6 +58,18 @@ Manual entry (~30 s): date, type (Easy, Tempo, Interval, Long, Race, Treadmill),
 Duration can be typed on the number pad without ":" — read like a stopwatch: `4530` = 45:30, `003000` = 0:30:00, `13000` = 1:30:00, `45` = 45 min. The field shows the parsed h:mm:ss after leaving it.
 Races: name, date, distance, target time, linked result → countdown on home screen.
 
+## After Finish
+Right after Finish, a short positive line sits above the muscle map, with "N exercises · N sets · N min" under it. It is chosen from the session, always positive:
+- **You beat it today.** — at least one lift set a personal best. A **Personal best** card (green border) follows, listing each one: the new set in large green ("55 kg × 8") and the old record under it ("was 52.5 kg × 10 · 14 Nov").
+- **You nailed it.** — every planned target was hit.
+- **Done. Every session counts.** — any other day (a miss is never mentioned).
+It shows only once; opening the session later from History does not show it. The muscle map itself is unchanged.
+
+## Personal best
+A set is a personal best when it is heavier than any earlier main set of that exercise, or has more reps at the same weight (weaker side for left/right; drop sets not counted). A first-ever exercise has no record to beat, so it is not a personal best.
+- **During the session**: when a set marked done is a personal best, a green **PB** badge appears under it ("heaviest ever (was 52.5 kg)" or "most reps at 50 kg (was 10)") and a short "Personal best · 55 kg × 8" message shows.
+- **After Finish**: the Personal best card (see After Finish).
+
 ## Mobility and core
 Logged inside any session. Formats: reps / hold / distance, optional per side. No progression recommendation.
 
@@ -87,9 +99,9 @@ Labelled body figure (front/back toggle), one green scale with clearly separated
 ## Progress tab
 Two tabs so charts never mix: **Lifting | Running**.
 - **Lifting**, in two titled sections:
-  - **Exercise progress** (top, used most): one exercise chosen from a searchable A–Z list; est. 1RM or top set (points colored by location); Left vs Right for unilateral exercises.
+  - **Exercise progress** (top, used most): one exercise chosen from a searchable A–Z list. Two centred buttons of equal width: **Weight** (opens first) = the heaviest weight actually lifted in each session, and **Est. 1RM**. Points are coloured by location. Tap the chart to see the nearest point's date and weight × reps (phones have no hover). Below the chart, **Recent sessions**: the last 5 sessions with weight × reps per set ("47.5 kg × 10, 10 · 45 kg × 11"; left/right as "R10/L9"), location and set count; tap a row to open the session. Left vs Right chart for unilateral exercises.
   - **Weekly overview** (all exercises): muscle map (this week / last week), working sets per week.
-- **Running**: km per week, and pace for every run. The pace axis is inverted (faster = higher, marked "faster ↑").
+- **Running**: km per week, and pace for every run. The pace axis is inverted (faster = higher, marked "faster ↑"). Km per week bars use the app green. Pace points keep their run-type colours (Outdoor blue, Treadmill orange, Race red).
 
 Body weight lives in **More → Body weight**: chart, quick add, and the list of entries.
 

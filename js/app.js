@@ -4,17 +4,17 @@ import {
   num, fmtKg, e1rm, daysBetween, downloadFile, toCSV,
 } from './util.js';
 import { classify, STARTER, GROUPS, defaultStep, effStep, ADDED_V24, ALIASES } from './seed.js';
-import { recommend, learnFactors, repsOf, workingSets, entryBest } from './recommend.js';
+import { recommend, learnFactors, repsOf, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict, bestBefore, pbSets } from './recommend.js';
 import { convertHevy } from './hevy.js';
-import { lineChart, barChart, legend, LOC_COLORS } from './charts.js';
+import { lineChart, barChart, legend, LOC_COLORS, chartTap } from './charts.js';
 import { muscleVolume, muscleFigure, shadeLegend } from './muscles.js';
 
 // ---------- state ----------
 const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], meta: {} };
 let draft = null;          // plan being built
-let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
+let ui = { histFilter: 'all', progEx: null, progMetric: 'top', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.5';
+const APP_VERSION = 'v2.6';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
@@ -133,6 +133,7 @@ function route() {
   const fn = routes[path] || routes[''];
   if (path !== 'run') ui.runEdit = null;
   if (path !== 'races') ui.raceEdit = null;
+  if (path !== 'session' || args[0] !== ui.justFinished) ui.justFinished = null; // the "You nailed it" line shows once, right after Finish
   ui.picker = null; ui.hist = null;
   render(fn, args);
   window.scrollTo(0, restoreY != null ? restoreY : 0);
@@ -552,6 +553,7 @@ function entryCard(s, e, ei) {
   const fields = ex.format === 'hold' ? (sides(ex) ? ['secR', 'secL'] : ['sec'])
     : ex.format === 'dist' ? ['m']
     : [...(ex.format === 'wr' ? ['w'] : []), ...(sides(ex) ? ['rR', 'rL'] : ['r'])];
+  const pbs = livePbs(s, e, ex);
   const rows = e.sets.map((st, si) => {
     const d = setDefaults(s, e, si);
     const inputs = fields.map(f => `<input inputmode="decimal" data-e="${ei}" data-s="${si}" data-f="${f}" value="${st[f] ?? ''}" placeholder="${d[f] ?? ''}">`).join('');
@@ -559,6 +561,7 @@ function entryCard(s, e, ei) {
     const dropFields = sides(ex) ? [['w', 'kg'], ['rR', 'R reps'], ['rL', 'L reps']] : [['w', 'kg'], ['r', 'reps']];
     const drops = (st.drop || []).map((dp, di) => `<div class="setrow drop dcols${dropFields.length}"><span class="sn">↳</span>${dropFields.map(([f, ph]) => `<input inputmode="decimal" data-e="${ei}" data-s="${si}" data-d="${di}" data-f="${f}" value="${dp[f] ?? ''}" placeholder="${ph}">`).join('')}<button class="icon" data-act="rmDrop" data-e="${ei}" data-s="${si}" data-d="${di}">×</button></div>`).join('');
     return `<div class="setrow cols${fields.length}"><span class="sn">${si + 1}</span>${inputs}<button class="done ${st.doneAt ? 'on' : ''}" data-act="done" data-e="${ei}" data-s="${si}" aria-label="Set done">✓</button></div>
+      ${pbs[si] ? `<div class="pbnote"><span class="badge">PB</span> ${pbs[si]}</div>` : ''}
       ${drops}
       <div class="setmeta">${rest != null ? `<span class="muted small">rest ${fmtDur(rest)}</span>` : '<span></span>'}
         <span>${ex.format === 'wr' ? `<button class="link small" data-act="addDrop" data-e="${ei}" data-s="${si}">+ drop</button>` : ''}<button class="link small" data-act="rmSet" data-e="${ei}" data-s="${si}">remove</button></span></div>`;
@@ -600,11 +603,40 @@ routes.session = function session(id) {
     <label>Location</label>${chips(`sloc:${s.id}`, LOCS.map(l => [l, l]), s.location)}
     <p class="muted small">${fmtTime(s.start)}${dur ? ` · ${fmtDur(dur)}` : ''}${s.sleep != null ? ` · sleep ${s.sleep >= 8 ? '8+' : s.sleep} h` : ''}${s.source === 'hevy' ? ' · imported from Hevy' : ''}</p>
   </section>
+  ${ui.justFinished === s.id ? ackHtml(s, dur) : ''}
   ${musclesCard([s], 'Muscles worked', [1, 2, 3], 'sets this session')}
   ${body}
   <div class="actions"><button class="btn" data-act="goto" data-h="#/workout/${s.id}">Edit sets</button><button class="btn danger" data-act="delSession" data-id="${s.id}">Delete</button></div>
   ${histHtml()}`;
 };
+
+// Positive line above the muscle map, only right after Finish; personal bests get their own card.
+const setText = (st, ex) => setsLine({ sets: [st] }, ex);
+function ackHtml(s, dur) {
+  const v = sessionVerdict(s, S.sessions, exById);
+  const n = s.entries.length;
+  const sets = s.entries.reduce((a, e) => { const ex = exById(e.exId); return a + (ex ? workingSets(e, ex).length : 0); }, 0);
+  const mins = dur >= 60 ? ` · ${Math.round(dur / 60)} min` : '';
+  const card = v.bests.length ? `<section class="card pbcard"><div class="pbhead"><span class="medal">PB</span>${v.bests.length === 1 ? 'Personal best' : `${v.bests.length} personal bests`}</div>
+    ${v.bests.map(b => `<div class="pbrow"><div class="n">${esc(b.name)}</div><div class="v">${esc(setText(b.set, b.ex))}</div><div class="was">was ${esc(setText(b.prev.set, b.ex))} · ${fmtShort(b.prev.date)}</div></div>`).join('')}
+  </section>` : '';
+  return `<div class="ack ${v.kind}"><div class="big">${v.title}</div><div class="line">${n} exercise${n === 1 ? '' : 's'} · ${sets} set${sets === 1 ? '' : 's'}${mins}</div></div>${card}`;
+}
+
+// Personal bests among the sets marked done in a running session: { setIndex: note }.
+function livePbs(s, e, ex) {
+  if (!isLift(ex)) return {};
+  const prev = bestBefore(ex, S.sessions, s);
+  const done = e.sets.map((st, i) => [st, i]).filter(([st]) => st.doneAt);
+  const out = {};
+  let ref = prev;
+  for (const k of pbSets(done.map(([st]) => st), ex, prev)) {
+    const [st, i] = done[k], w = st.w || 0, r = repsOf(st, ex);
+    out[i] = w > ref.w ? `heaviest ever (was ${fmtKg(ref.w)} kg)` : w ? `most reps at ${fmtKg(w)} kg (was ${ref.r})` : `most reps (was ${ref.r})`;
+    ref = { w, r };
+  }
+  return out;
+}
 
 // ---------- muscle map card ----------
 const countSets = (e, ex) => workingSets(e, ex).length;
@@ -670,14 +702,22 @@ routes.progress = function progress() {
   if (ex) {
     const pts = [];
     const imb = [];
+    const recent = [];
+    const weighted = ex.format === 'wr' && doneSessions().some(s => { const e = s.entries.find(x => x.exId === ex.id); return e && heaviestSet(e, ex); });
+    const metric = !weighted ? 'reps' : ui.progMetric === 'e1rm' ? 'e1rm' : 'top';
     doneSessions().forEach(s => {
       const e = s.entries.find(x => x.exId === ex.id);
       if (!e) return;
       const b = entryBest(e, ex);
       if (!b) return;
-      const metric = ui.progMetric;
-      const y = ex.format !== 'wr' || !b.w ? b.r : metric === 'e1rm' ? +e1rm(b.w, b.r).toFixed(1) : b.w;
-      pts.push({ x: parseLocal(s.start), y, color: LOC_COLORS[s.location], label: `${fmtShort(s.start)} ${s.location}: ${b.w ? fmtKg(b.w) + ' × ' : ''}${b.r}` });
+      recent.push({ s, e });
+      const top = heaviestSet(e, ex);
+      let y, what;
+      if (metric === 'top' && top) { y = top.w; what = `${fmtKg(top.w)} ${unitW(ex)} × ${top.r}`; }
+      else if (metric === 'e1rm' && b.w) { y = +e1rm(b.w, b.r).toFixed(1); what = `${fmtKg(b.w)} × ${b.r} → 1RM ${fmtKg(y)}`; }
+      else if (metric === 'reps') { y = b.r; what = `${b.w ? fmtKg(b.w) + ' × ' : ''}${b.r} reps`; }
+      else return;
+      pts.push({ x: parseLocal(s.start), y, color: LOC_COLORS[s.location], label: `${fmtShort(s.start)} · ${what}` });
       if (sides(ex)) {
         const ws = workingSets(e, ex).filter(x => x.rL != null && x.rR != null && Math.max(x.rL, x.rR) > 0);
         if (ws.length) {
@@ -688,14 +728,22 @@ routes.progress = function progress() {
     });
     pts.sort((a, b) => a.x - b.x);
     imb.sort((a, b) => a.x - b.x);
+    recent.sort((a, b) => (a.s.start < b.s.start ? 1 : -1));
     const ys = pts.map(p => p.y);
     const first = pts[0], last = pts[pts.length - 1];
-    const yl = ex.format !== 'wr' ? 'best reps' : ui.progMetric === 'e1rm' ? `est. 1RM (${unitW(ex)})` : `top set (${unitW(ex)})`;
+    const u = metric === 'reps' ? '' : ' kg';
+    const yl = metric === 'reps' ? 'best reps' : metric === 'e1rm' ? `est. 1RM (${unitW(ex)})` : `heaviest weight (${unitW(ex)})`;
+    const rows = recent.slice(0, 5).map(({ s, e }) => {
+      const n = workingSets(e, ex).length;
+      const line = ex.format === 'wr' ? esc(setsLine(e, ex)) : e.sets.map(x => fmtSet(x, ex)).join(' · ');
+      return `<a class="rs" href="#/session/${s.id}"><span class="d">${fmtShort(s.start)}</span><span class="v">${line}</span><span></span><span class="l"><i style="background:${LOC_COLORS[s.location]}"></i>${esc(s.location)} · ${n} set${n === 1 ? '' : 's'}</span></a>`;
+    }).join('');
     exBlock = `
-      ${ex.format === 'wr' ? chips('progMetric', [['e1rm', 'Est. 1RM'], ['top', 'Top set weight']], ui.progMetric) : ''}
-      <div class="stats"><div><b>${ys.length ? fmtKg(Math.max(...ys)) : '–'}</b><span>best</span></div><div><b>${last ? fmtKg(last.y) : '–'}</b><span>last</span></div><div><b>${first && last && first.y ? `${last.y >= first.y ? '+' : ''}${Math.round((last.y / first.y - 1) * 100)}%` : '–'}</b><span>since first</span></div></div>
+      ${weighted ? chips('progMetric', [['top', 'Weight'], ['e1rm', 'Est. 1RM']], metric).replace('class="chips"', 'class="chips center"') : ''}
+      <div class="stats"><div><b>${ys.length ? fmtKg(Math.max(...ys)) + u : '–'}</b><span>${metric === 'top' ? 'heaviest' : 'best'}</span></div><div><b>${last ? fmtKg(last.y) + u : '–'}</b><span>last</span></div><div><b>${first && last && first.y ? `${last.y >= first.y ? '+' : ''}${Math.round((last.y / first.y - 1) * 100)}%` : '–'}</b><span>since first</span></div></div>
       ${lineChart([{ name: ex.name, color: 'var(--muted)', points: pts }], { yLabel: yl })}
       ${legend(LOCS.map(l => [l, LOC_COLORS[l]]))}
+      ${rows ? `<div class="recent"><h3>Recent sessions</h3>${rows}<p class="muted small">Tap a row to open the full session.</p></div>` : ''}
       ${imb.length ? `<h3>Right vs left</h3><p class="muted small">Positive = right stronger. 0% = balanced.</p>${lineChart([{ name: 'imbalance', color: 'var(--accent)', points: imb }], { yLabel: '% difference' })}` : ''}`;
   }
 
@@ -734,7 +782,7 @@ routes.progress = function progress() {
   </section>`;
   else if (tab === 'running') body = `
   <section class="card"><h3>Running km per week</h3>
-    ${barChart(weeks.map(w => ({ label: fmtShort(w), value: +kmPerWeek[w].toFixed(1) })), { color: 'var(--home)' })}
+    ${barChart(weeks.map(w => ({ label: fmtShort(w), value: +kmPerWeek[w].toFixed(1) })), { color: 'var(--accent)' })}
   </section>
   <section class="card"><h3>Pace</h3>
     ${lineChart([{ name: 'pace', color: 'var(--muted)', points: paces }], { yLabel: 'min/km', yFmt: v => fmtDur(v), invert: true, cornerNote: 'faster ↑' })}
@@ -1025,6 +1073,8 @@ const actions = {
     const d = setDefaults(s, e, si);
     for (const k of ['w', 'r', 'rL', 'rR', 'sec', 'secL', 'secR', 'm']) if (st[k] == null && d[k] != null) st[k] = d[k];
     st.doneAt = Date.now();
+    const ex = exById(e.exId);
+    if (livePbs(s, e, ex)[si]) toast(`Personal best · ${setText(st, ex)}`);
   }),
   emv: el => withSession(s => {
     const i = +el.dataset.i, j = i + +el.dataset.d;
@@ -1044,6 +1094,7 @@ const actions = {
     if (!s.entries.length) { if (confirm('No sets logged. Discard this session?')) { remove('sessions', s.id); goTab('#/'); } return; }
     s.status = 'done'; s.end = nowIso();
     save('sessions', s);
+    ui.justFinished = s.id;
     goReplace(`#/session/${s.id}`);
     toast('Session saved');
   },
@@ -1201,6 +1252,7 @@ function focusPicker(select = true) {
 
 // ---------- global events ----------
 document.addEventListener('click', ev => {
+  if (chartTap(ev)) return;
   const a = ev.target.closest('a[href^="#/"]');
   if (a) {
     ev.preventDefault();

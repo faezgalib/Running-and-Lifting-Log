@@ -4,17 +4,17 @@ import {
   num, fmtKg, e1rm, daysBetween, downloadFile, toCSV,
 } from './util.js';
 import { classify, STARTER, GROUPS, defaultStep, effStep, ADDED_V24, ALIASES } from './seed.js';
-import { recommend, learnFactors, repsOf, workingSets, entryBest } from './recommend.js';
+import { recommend, learnFactors, repsOf, workingSets, entryBest, heaviestSet, setsLine } from './recommend.js';
 import { convertHevy } from './hevy.js';
-import { lineChart, barChart, legend, LOC_COLORS } from './charts.js';
+import { lineChart, barChart, legend, LOC_COLORS, chartTap } from './charts.js';
 import { muscleVolume, muscleFigure, shadeLegend } from './muscles.js';
 
 // ---------- state ----------
 const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], meta: {} };
 let draft = null;          // plan being built
-let ui = { histFilter: 'all', progEx: null, progMetric: 'e1rm', openWhy: {}, hevy: null, picker: null };
+let ui = { histFilter: 'all', progEx: null, progMetric: 'top', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.5';
+const APP_VERSION = 'v2.6';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
@@ -670,14 +670,22 @@ routes.progress = function progress() {
   if (ex) {
     const pts = [];
     const imb = [];
+    const recent = [];
+    const weighted = ex.format === 'wr' && doneSessions().some(s => { const e = s.entries.find(x => x.exId === ex.id); return e && heaviestSet(e, ex); });
+    const metric = !weighted ? 'reps' : ui.progMetric === 'e1rm' ? 'e1rm' : 'top';
     doneSessions().forEach(s => {
       const e = s.entries.find(x => x.exId === ex.id);
       if (!e) return;
       const b = entryBest(e, ex);
       if (!b) return;
-      const metric = ui.progMetric;
-      const y = ex.format !== 'wr' || !b.w ? b.r : metric === 'e1rm' ? +e1rm(b.w, b.r).toFixed(1) : b.w;
-      pts.push({ x: parseLocal(s.start), y, color: LOC_COLORS[s.location], label: `${fmtShort(s.start)} ${s.location}: ${b.w ? fmtKg(b.w) + ' × ' : ''}${b.r}` });
+      recent.push({ s, e });
+      const top = heaviestSet(e, ex);
+      let y, what;
+      if (metric === 'top' && top) { y = top.w; what = `${fmtKg(top.w)} ${unitW(ex)} × ${top.r}`; }
+      else if (metric === 'e1rm' && b.w) { y = +e1rm(b.w, b.r).toFixed(1); what = `${fmtKg(b.w)} × ${b.r} → 1RM ${fmtKg(y)}`; }
+      else if (metric === 'reps') { y = b.r; what = `${b.w ? fmtKg(b.w) + ' × ' : ''}${b.r} reps`; }
+      else return;
+      pts.push({ x: parseLocal(s.start), y, color: LOC_COLORS[s.location], label: `${fmtShort(s.start)} · ${what}` });
       if (sides(ex)) {
         const ws = workingSets(e, ex).filter(x => x.rL != null && x.rR != null && Math.max(x.rL, x.rR) > 0);
         if (ws.length) {
@@ -688,14 +696,22 @@ routes.progress = function progress() {
     });
     pts.sort((a, b) => a.x - b.x);
     imb.sort((a, b) => a.x - b.x);
+    recent.sort((a, b) => (a.s.start < b.s.start ? 1 : -1));
     const ys = pts.map(p => p.y);
     const first = pts[0], last = pts[pts.length - 1];
-    const yl = ex.format !== 'wr' ? 'best reps' : ui.progMetric === 'e1rm' ? `est. 1RM (${unitW(ex)})` : `top set (${unitW(ex)})`;
+    const u = metric === 'reps' ? '' : ' kg';
+    const yl = metric === 'reps' ? 'best reps' : metric === 'e1rm' ? `est. 1RM (${unitW(ex)})` : `heaviest weight (${unitW(ex)})`;
+    const rows = recent.slice(0, 5).map(({ s, e }) => {
+      const n = workingSets(e, ex).length;
+      const line = ex.format === 'wr' ? esc(setsLine(e, ex)) : e.sets.map(x => fmtSet(x, ex)).join(' · ');
+      return `<a class="rs" href="#/session/${s.id}"><span class="d">${fmtShort(s.start)}</span><span class="v">${line}</span><span></span><span class="l"><i style="background:${LOC_COLORS[s.location]}"></i>${esc(s.location)} · ${n} set${n === 1 ? '' : 's'}</span></a>`;
+    }).join('');
     exBlock = `
-      ${ex.format === 'wr' ? chips('progMetric', [['e1rm', 'Est. 1RM'], ['top', 'Top set weight']], ui.progMetric) : ''}
-      <div class="stats"><div><b>${ys.length ? fmtKg(Math.max(...ys)) : '–'}</b><span>best</span></div><div><b>${last ? fmtKg(last.y) : '–'}</b><span>last</span></div><div><b>${first && last && first.y ? `${last.y >= first.y ? '+' : ''}${Math.round((last.y / first.y - 1) * 100)}%` : '–'}</b><span>since first</span></div></div>
+      ${weighted ? chips('progMetric', [['top', 'Weight'], ['e1rm', 'Est. 1RM']], metric).replace('class="chips"', 'class="chips center"') : ''}
+      <div class="stats"><div><b>${ys.length ? fmtKg(Math.max(...ys)) + u : '–'}</b><span>${metric === 'top' ? 'heaviest' : 'best'}</span></div><div><b>${last ? fmtKg(last.y) + u : '–'}</b><span>last</span></div><div><b>${first && last && first.y ? `${last.y >= first.y ? '+' : ''}${Math.round((last.y / first.y - 1) * 100)}%` : '–'}</b><span>since first</span></div></div>
       ${lineChart([{ name: ex.name, color: 'var(--muted)', points: pts }], { yLabel: yl })}
       ${legend(LOCS.map(l => [l, LOC_COLORS[l]]))}
+      ${rows ? `<div class="recent"><h3>Recent sessions</h3>${rows}<p class="muted small">Tap a row to open the full session.</p></div>` : ''}
       ${imb.length ? `<h3>Right vs left</h3><p class="muted small">Positive = right stronger. 0% = balanced.</p>${lineChart([{ name: 'imbalance', color: 'var(--accent)', points: imb }], { yLabel: '% difference' })}` : ''}`;
   }
 
@@ -713,7 +729,8 @@ routes.progress = function progress() {
   });
   const kmPerWeek = Object.fromEntries(weeks.map(w => [w, 0]));
   S.runs.forEach(r => { const wk = weekKey(r.date); if (wk in kmPerWeek) kmPerWeek[wk] += r.distKm || 0; });
-  const paces = S.runs.filter(r => r.distKm > 0 && r.durSec > 0).map(r => ({ x: parseLocal(r.date), y: r.durSec / r.distKm, color: r.type === 'Race' ? 'var(--off)' : r.type === 'Treadmill' ? 'var(--gym)' : 'var(--home)', label: `${fmtShort(r.date)} ${r.type} ${r.distKm} km ${fmtPace(r.durSec, r.distKm)}` }));
+  // One colour for running; the run type is shown by the point's shape (location colours stay for lifting).
+  const paces = S.runs.filter(r => r.distKm > 0 && r.durSec > 0).map(r => ({ x: parseLocal(r.date), y: r.durSec / r.distKm, color: 'var(--accent)', shape: r.type === 'Race' ? 'ring' : r.type === 'Treadmill' ? 'hollow' : 'dot', label: `${fmtShort(r.date)} ${r.type} ${r.distKm} km ${fmtPace(r.durSec, r.distKm)}` }));
 
   const wkOff = ui.mweek || 0;
   const wkStart = lastWeeks(wkOff + 1)[0];
@@ -734,11 +751,11 @@ routes.progress = function progress() {
   </section>`;
   else if (tab === 'running') body = `
   <section class="card"><h3>Running km per week</h3>
-    ${barChart(weeks.map(w => ({ label: fmtShort(w), value: +kmPerWeek[w].toFixed(1) })), { color: 'var(--home)' })}
+    ${barChart(weeks.map(w => ({ label: fmtShort(w), value: +kmPerWeek[w].toFixed(1) })), { color: 'var(--accent)' })}
   </section>
   <section class="card"><h3>Pace</h3>
-    ${lineChart([{ name: 'pace', color: 'var(--muted)', points: paces }], { yLabel: 'min/km', yFmt: v => fmtDur(v), invert: true, cornerNote: 'faster ↑' })}
-    ${legend([['Outdoor', 'var(--home)'], ['Treadmill', 'var(--gym)'], ['Race', 'var(--off)']])}
+    ${lineChart([{ name: 'pace', color: 'var(--accent)', points: paces }], { yLabel: 'min/km', yFmt: v => fmtDur(v), invert: true, cornerNote: 'faster ↑' })}
+    <div class="legend shapes"><span><i class="dot"></i>Outdoor</span><span><i class="hollow"></i>Treadmill</span><span><i class="ring"></i>Race</span></div>
   </section>`;
   return `<header class="top"><h1>Progress</h1></header>
   <div class="tabs">${[['lifts', 'Lifting'], ['running', 'Running']].map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="ptab" data-k="${k}">${l}</button>`).join('')}</div>
@@ -1201,6 +1218,7 @@ function focusPicker(select = true) {
 
 // ---------- global events ----------
 document.addEventListener('click', ev => {
+  if (chartTap(ev)) return;
   const a = ev.target.closest('a[href^="#/"]');
   if (a) {
     ev.preventDefault();

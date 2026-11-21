@@ -87,9 +87,9 @@ Labelled body figure (front/back toggle), one green scale with clearly separated
 ## Progress tab
 Two tabs so charts never mix: **Lifting | Running**.
 - **Lifting**, in two titled sections:
-  - **Exercise progress** (top, used most): one exercise chosen from a searchable A–Z list; est. 1RM or top set (points colored by location); Left vs Right for unilateral exercises.
+  - **Exercise progress** (top, used most): one exercise chosen from a searchable A–Z list. Two centred buttons of equal width: **Weight** (opens first) = the heaviest weight actually lifted in each session, and **Est. 1RM**. Points are coloured by location. Tap the chart to see the nearest point's date and weight × reps (phones have no hover). Below the chart, **Recent sessions**: the last 5 sessions with weight × reps per set ("47.5 kg × 10, 10 · 45 kg × 11"; left/right as "R10/L9"), location and set count; tap a row to open the session. Left vs Right chart for unilateral exercises.
   - **Weekly overview** (all exercises): muscle map (this week / last week), working sets per week.
-- **Running**: km per week, and pace for every run. The pace axis is inverted (faster = higher, marked "faster ↑").
+- **Running**: km per week, and pace for every run. The pace axis is inverted (faster = higher, marked "faster ↑"). One colour (the app green); the run type is shown by the point's shape: filled = Outdoor, hollow = Treadmill, large with a white ring = Race. Blue / orange / red mean location only (Home / Gym / Offshore), never anything else.
 
 Body weight lives in **More → Body weight**: chart, quick add, and the list of entries.
 

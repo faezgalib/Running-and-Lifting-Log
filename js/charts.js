@@ -20,7 +20,9 @@ function ticks(min, max, n = 4) {
 const fmtTick = v => (Math.abs(v) >= 100 ? Math.round(v) : +v.toFixed(1));
 
 /**
- * series: [{ name, color, points: [{ x: Date|number, y, color?, label? }], dashed? }]
+ * series: [{ name, color, points: [{ x: Date|number, y, color?, label?, shape? }], dashed? }]
+ * shape: 'dot' (default, filled), 'hollow' (outline only), 'ring' (larger, white outline).
+ * Tapping the chart shows the label of the nearest point (phones have no hover).
  */
 export function lineChart(series, { yLabel = '', xFmt = d => `${d.getDate()}/${d.getMonth() + 1}`, yFmt = fmtTick, height = H, invert = false, cornerNote = '' } = {}) {
   const pts = series.flatMap(s => s.points);
@@ -39,11 +41,46 @@ export function lineChart(series, { yLabel = '', xFmt = d => `${d.getDate()}/${d
   for (const s of series) {
     const sp = [...s.points].sort((a, b) => a.x - b.x);
     if (sp.length > 1) g += `<polyline fill="none" stroke="${s.color}" stroke-width="1.6" ${s.dashed ? 'stroke-dasharray="4 3"' : ''} stroke-opacity=".7" points="${sp.map(p => `${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ')}"/>`;
-    for (const p of sp) g += `<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="3" fill="${p.color || s.color}"><title>${esc(p.label || '')}</title></circle>`;
+    for (const p of sp) g += pointSvg(X(p.x), Y(p.y), p.color || s.color, p.shape, p.label);
   }
   if (yLabel) g += `<text x="${P.l}" y="9" class="ax">${esc(yLabel)}</text>`;
   if (cornerNote) g += `<text x="${W - P.r}" y="9" class="ax note" text-anchor="end">${esc(cornerNote)}</text>`;
-  return `<svg viewBox="0 0 ${W} ${h}" class="chart" role="img">${g}</svg>`;
+  return `<div class="chartbox"><svg viewBox="0 0 ${W} ${h}" class="chart tappable" role="img" aria-label="${esc(yLabel)}">${g}</svg></div>`;
+}
+
+function pointSvg(x, y, color, shape, label) {
+  const c = `cx="${x.toFixed(1)}" cy="${y.toFixed(1)}"`;
+  const tip = `data-tip="${esc(label || '')}"`;
+  const t = `<title>${esc(label || '')}</title>`;
+  if (shape === 'hollow') return `<circle ${c} r="3.2" fill="var(--surface)" stroke="${color}" stroke-width="1.5" ${tip}>${t}</circle>`;
+  if (shape === 'ring') return `<circle ${c} r="5" fill="${color}" stroke="var(--text)" stroke-width="1.5" ${tip}>${t}</circle>`;
+  return `<circle ${c} r="3" fill="${color}" ${tip}>${t}</circle>`;
+}
+
+/** Show the label of the point nearest to a tap on a line chart. Returns true if handled. */
+export function chartTap(ev) {
+  const svg = ev.target.closest && ev.target.closest('svg.chart.tappable');
+  document.querySelectorAll('.chartbox .tip').forEach(t => t.remove());
+  document.querySelectorAll('.chartbox circle.hit').forEach(c => c.classList.remove('hit'));
+  if (!svg) return false;
+  const pts = [...svg.querySelectorAll('circle[data-tip]')];
+  if (!pts.length) return true;
+  const box = svg.getBoundingClientRect(), k = box.width / W;
+  const tx = (ev.clientX - box.left) / k;
+  const near = pts.reduce((a, c) => (Math.abs(+c.getAttribute('cx') - tx) < Math.abs(+a.getAttribute('cx') - tx) ? c : a));
+  near.classList.add('hit');
+  const tip = document.createElement('div');
+  tip.className = 'tip';
+  tip.textContent = near.dataset.tip;
+  const wrap = svg.parentElement;
+  wrap.appendChild(tip);
+  // SVG elements have no offsetTop, so place the label from the boxes on screen.
+  const wb = wrap.getBoundingClientRect();
+  const cx = box.left - wb.left + +near.getAttribute('cx') * k, cy = box.top - wb.top + +near.getAttribute('cy') * k;
+  const left = Math.min(Math.max(cx - tip.offsetWidth / 2, 0), wrap.clientWidth - tip.offsetWidth);
+  const top = cy - tip.offsetHeight - 10 < 0 ? cy + 12 : cy - tip.offsetHeight - 10;
+  tip.style.left = `${left}px`; tip.style.top = `${top}px`;
+  return true;
 }
 
 /** bars: [{ label, value, color? }] */

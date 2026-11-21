@@ -12,9 +12,9 @@ import { muscleVolume, muscleFigure, shadeLegend } from './muscles.js';
 // ---------- state ----------
 const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], meta: {} };
 let draft = null;          // plan being built
-let ui = { histFilter: 'all', progEx: null, progMetric: 'top', openWhy: {}, hevy: null, picker: null };
+let ui = { paceView: 'outdoor', histFilter: 'all', progEx: null, progMetric: 'top', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.6';
+const APP_VERSION = 'v2.7';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
@@ -230,16 +230,16 @@ routes[''] = function home() {
     <div class="greet">${greeting()} · ${esc(momentum())}</div>
   </section>
   ${act ? `<a class="card resume" href="#/workout/${act.id}"><b>Session in progress</b><span>${locBadge(act.location)} started ${fmtTime(act.start)} · ${act.entries.length} exercises</span><span class="go">Resume →</span></a>` : ''}
-  ${nextRace ? `<div class="card race"><div class="big">${daysBetween(today(), nextRace.date)}</div><div><b>days to ${esc(nextRace.name)}</b><span class="muted">${fmtDate(nextRace.date)} · ${nextRace.distKm} km${nextRace.targetSec ? ` · target ${fmtDur(nextRace.targetSec)}` : ''}</span></div></div>` : ''}
+  ${nextRace ? `<div class="card race run-theme"><div class="big">${daysBetween(today(), nextRace.date)}</div><div><b>days to ${esc(nextRace.name)}</b><span class="muted">${fmtDate(nextRace.date)} · ${nextRace.distKm} km${nextRace.targetSec ? ` · target ${fmtDur(nextRace.targetSec)}` : ''}</span></div></div>` : ''}
   <div class="cta">
     <button class="btn primary pill two" data-act="newPlan"><span class="t">Lift</span><span class="s">Start a session</span></button>
-    <button class="btn pill outline two" data-act="goto" data-h="#/run/new"><span class="t">Run</span><span class="s">Log a finished run</span></button>
+    <button class="btn pill outline two run" data-act="goto" data-h="#/run/new"><span class="t">Run</span><span class="s">Log a finished run</span></button>
   </div>
   <div class="hh"><span>THIS WEEK</span></div>
   <div class="wk">
     <div><b>${wkSess.length}</b><span>sessions</span></div>
     <div><b>${wkSets}</b><span>working sets</span></div>
-    <div><b>${+km.toFixed(1)}</b><span>km run</span></div>
+    <div class="km"><b>${+km.toFixed(1)}</b><span>km run</span></div>
   </div>
   <div class="hh"><span>RECENT</span><a href="#/history">See all</a></div>
   ${homeRecent(5)}
@@ -668,7 +668,7 @@ routes.run = function run(id) {
   else { const found = S.runs.find(x => x.id === id); r = found ? { ...found } : null; }
   if (!r) return `<p>Run not found.</p>`;
   ui.runEdit = r;
-  return `
+  return `<div class="run-theme">
   <header class="top"><button class="back" data-act="back" data-h="${isNew ? '#/' : '#/history'}">‹</button><h1>${isNew ? 'Log run' : 'Run'}</h1></header>
   <section class="card form">
     <label>Date & time</label><input type="datetime-local" data-run="date" value="${r.date}">
@@ -688,7 +688,7 @@ routes.run = function run(id) {
   <div class="actions">
     <button class="btn primary wide" data-act="saveRun">Save</button>
     ${isNew ? '' : `<button class="btn danger" data-act="delRun" data-id="${r.id}">Delete</button>`}
-  </div>`;
+  </div></div>`;
 };
 
 // ---------- PROGRESS ----------
@@ -761,7 +761,13 @@ routes.progress = function progress() {
   });
   const kmPerWeek = Object.fromEntries(weeks.map(w => [w, 0]));
   S.runs.forEach(r => { const wk = weekKey(r.date); if (wk in kmPerWeek) kmPerWeek[wk] += r.distKm || 0; });
-  const paces = S.runs.filter(r => r.distKm > 0 && r.durSec > 0).map(r => ({ x: parseLocal(r.date), y: r.durSec / r.distKm, color: r.type === 'Race' ? 'var(--off)' : r.type === 'Treadmill' ? 'var(--gym)' : 'var(--home)', label: `${fmtShort(r.date)} ${r.type} ${r.distKm} km ${fmtPace(r.durSec, r.distKm)}` }));
+  // Running is one colour (blue, like the logo). Run type is shown by shape: filled = outdoor, hollow = treadmill, ringed = race.
+  // Orange and red are kept for locations only. Treadmill pace is not comparable with outdoor pace, so Outdoor is the default view.
+  const paceView = ui.paceView || 'outdoor';
+  const paces = S.runs.filter(r => r.distKm > 0 && r.durSec > 0)
+    .filter(r => paceView === 'all' || (paceView === 'treadmill' ? r.type === 'Treadmill' : r.type !== 'Treadmill'))
+    .map(r => ({ x: parseLocal(r.date), y: r.durSec / r.distKm, color: 'var(--run)', shape: r.type === 'Race' ? 'ring' : r.type === 'Treadmill' ? 'hollow' : 'dot', label: `${fmtShort(r.date)} · ${r.type === 'Race' && r.raceName ? r.raceName : r.type} · ${r.distKm} km · ${fmtPace(r.durSec, r.distKm)}` }));
+  const shapesShown = new Set(paces.map(p => p.shape));
 
   const wkOff = ui.mweek || 0;
   const wkStart = lastWeeks(wkOff + 1)[0];
@@ -780,16 +786,17 @@ routes.progress = function progress() {
   <section class="card"><h3>Working sets per week</h3>
     ${barChart(weeks.map(w => ({ label: fmtShort(w), value: setsPerWeek[w] })))}
   </section>`;
-  else if (tab === 'running') body = `
+  else if (tab === 'running') body = `<div class="run-theme">
   <section class="card"><h3>Running km per week</h3>
-    ${barChart(weeks.map(w => ({ label: fmtShort(w), value: +kmPerWeek[w].toFixed(1) })), { color: 'var(--accent)' })}
+    ${barChart(weeks.map(w => ({ label: fmtShort(w), value: +kmPerWeek[w].toFixed(1) })), { color: 'var(--run)' })}
   </section>
   <section class="card"><h3>Pace</h3>
-    ${lineChart([{ name: 'pace', color: 'var(--muted)', points: paces }], { yLabel: 'min/km', yFmt: v => fmtDur(v), invert: true, cornerNote: 'faster ↑' })}
-    ${legend([['Outdoor', 'var(--home)'], ['Treadmill', 'var(--gym)'], ['Race', 'var(--off)']])}
-  </section>`;
+    ${chips('paceView', [['outdoor', 'Outdoor'], ['treadmill', 'Treadmill'], ['all', 'All']], paceView).replace('class="chips"', 'class="chips center"')}
+    ${lineChart([{ name: 'pace', color: 'var(--run)', points: paces }], { yLabel: 'min/km', yFmt: v => fmtDur(v), invert: true, cornerNote: 'faster ↑' })}
+    <div class="legend shapes">${[['dot', 'Outdoor'], ['hollow', 'Treadmill'], ['ring', 'Race']].filter(([k]) => shapesShown.has(k)).map(([k, l]) => `<span><i class="${k}"></i>${l}</span>`).join('')}</div>
+  </section></div>`;
   return `<header class="top"><h1>Progress</h1></header>
-  <div class="tabs">${[['lifts', 'Lifting'], ['running', 'Running']].map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="ptab" data-k="${k}">${l}</button>`).join('')}</div>
+  <div class="tabs">${[['lifts', 'Lifting'], ['running', 'Running']].map(([k, l]) => `<button class="${tab === k ? 'on' : ''} ${k === 'running' ? 'run' : ''}" data-act="ptab" data-k="${k}">${l}</button>`).join('')}</div>
   ${body}
   ${pickerHtml()}${histHtml()}`;
 };
@@ -903,7 +910,7 @@ routes.exercise.after = () => {
 routes.races = function races() {
   const list = [...S.races].sort((a, b) => (a.date < b.date ? -1 : 1));
   const r = ui.raceEdit || { id: null, name: '', date: '', distKm: '', targetSec: null, resultSec: null };
-  return `<header class="top"><button class="back" data-act="back" data-h="#/more">‹</button><h1>Races</h1></header>
+  return `<div class="run-theme"><header class="top"><button class="back" data-act="back" data-h="#/more">‹</button><h1>Races</h1></header>
   <div class="list">${list.map(x => `<button class="row" data-act="editRace" data-id="${x.id}"><div><b>${esc(x.name)}</b><span class="muted small">${fmtDate(x.date)} · ${x.distKm} km</span></div><div class="right">${x.resultSec ? `<b>${fmtDur(x.resultSec)}</b><span class="muted small">result</span>` : x.targetSec ? `<span class="muted small">target ${fmtDur(x.targetSec)}</span>` : ''}</div></button>`).join('') || '<p class="muted">No races yet.</p>'}</div>
   <section class="card form"><h3>${r.id ? 'Edit race' : 'Add race'}</h3>
     <label>Name</label><input id="rcName" value="${esc(r.name)}" placeholder="e.g. 10K race">
@@ -914,7 +921,7 @@ routes.races = function races() {
       <div><label>Result (h:mm:ss)</label><input id="rcResult" value="${r.resultSec ? fmtDur(r.resultSec) : ''}" placeholder="after the race"></div>
     </div>
     <div class="actions"><button class="btn primary" data-act="saveRace">Save</button>${r.id ? `<button class="btn ghost" data-act="cancelRace">Cancel</button><button class="btn danger" data-act="delRace" data-id="${r.id}">Delete</button>` : ''}</div>
-  </section>`;
+  </section></div>`;
 };
 routes.races.tab = 'more';
 
@@ -989,6 +996,7 @@ const actions = {
       saveDraft();
     } else if (name === 'histFilter') ui.histFilter = v;
     else if (name === 'progMetric') ui.progMetric = v;
+    else if (name === 'paceView') ui.paceView = v;
     else if (name === 'mview') ui.mview = v;
     else if (name === 'mweek') ui.mweek = +v;
     else if (name.startsWith('rir:')) {

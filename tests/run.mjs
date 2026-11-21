@@ -142,6 +142,9 @@ async function browserTests() {
     check('daily line shown', (await p.locator('.poster .q').innerText()).length > 5);
     check('Home has no opening animation', await p.evaluate(() => document.getAnimations().length === 0 && !document.querySelector('.home.intro')));
     const btns = (await p.locator('.cta .btn').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
+    const colors = await p.evaluate(() => { const v = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim().toLowerCase(); return { run: v('--run'), home: v('--home'), gym: v('--gym'), off: v('--off'), accent: v('--accent'), btn: getComputedStyle(document.querySelector('.cta .btn.run')).borderTopColor }; });
+    check('colour rule: green lift, blue run, Home/Gym/Offshore all different from both', colors.run === '#6ea8fe' && colors.accent === '#5fd0a6' && ![colors.run, colors.accent].some(c => [colors.home, colors.gym, colors.off].includes(c)), JSON.stringify(colors));
+    check('Run button is blue', colors.btn === 'rgb(110, 168, 254)', colors.btn);
     check('Home buttons: Lift / Run with descriptions', btns[0] === 'Lift Start a session' && btns[1] === 'Run Log a finished run', btns.join(' | '));
 
     section('Import from Hevy (fake data)');
@@ -261,9 +264,15 @@ async function browserTests() {
     await p.click('.tabs button:has-text("Running")');
     check('pace chart marked "faster ↑"', await p.locator('text=faster ↑').count() === 1);
     const runFills = await p.locator('section.card:has(h3:text("Running km per week")) rect').evaluateAll(rs => [...new Set(rs.map(r => r.getAttribute('fill')))]);
-    check('km per week bars use the app green', runFills.join() === 'var(--accent)', runFills.join());
-    const paceFills = await p.locator('section.card:has(h3:text("Pace")) circle').evaluateAll(cs => [...new Set(cs.map(c => c.getAttribute('fill')))]);
-    check('pace keeps its run-type colours', paceFills.length > 0 && paceFills.every(f => ['var(--home)', 'var(--gym)', 'var(--off)'].includes(f)), paceFills.join());
+    check('km per week bars are running blue', runFills.join() === 'var(--run)', runFills.join());
+    check('Running tab label is blue', await p.evaluate(() => getComputedStyle(document.querySelector('.tabs button.on')).color) === 'rgb(110, 168, 254)');
+    check('pace filter: Outdoor | Treadmill | All, Outdoor first', (await p.locator('.chips.center .chip').allInnerTexts()).join('|') === 'Outdoor|Treadmill|All' && (await p.locator('.chips.center .chip.on').innerText()) === 'Outdoor');
+    const paceFills = await p.locator('section.card:has(h3:text("Pace")) circle').evaluateAll(cs => [...new Set(cs.map(c => c.getAttribute('fill') === 'var(--surface)' ? c.getAttribute('stroke') : c.getAttribute('fill')))]);
+    check('pace points are running blue (no location colours)', paceFills.join() === 'var(--run)', paceFills.join());
+    const outdoorCount = await p.locator('section.card:has(h3:text("Pace")) circle').count();
+    await p.click('.chip[data-name=paceView][data-val=all]');
+    check('All shows every run', await p.locator('section.card:has(h3:text("Pace")) circle').count() >= outdoorCount && outdoorCount > 0);
+    await p.click('.chip[data-name=paceView][data-val=outdoor]');
     const pts = await p.locator('section.card:has(h3:text("Pace")) circle').evaluateAll(cs => cs.map(c => ({ y: +c.getAttribute('cy'), t: c.textContent })));
     const pace = t => { const m = /(\d+):(\d+)\/km/.exec(t); return m ? +m[1] * 60 + +m[2] : 0; };
     const fastest = [...pts].sort((a, b) => pace(a.t) - pace(b.t))[0], highest = [...pts].sort((a, b) => a.y - b.y)[0];
@@ -304,6 +313,7 @@ async function browserTests() {
     await tab('Home'); await p.click('button[data-h="#/run/new"]');
     await p.fill('[data-run=distKm]', '4'); await p.fill('[data-run=durSec]', '3000');
     check('"3000" on the number pad → pace 7:30/km', (await p.locator('#pace').innerText()) === '7:30/km');
+    check('Log a run uses running blue', await p.evaluate(() => getComputedStyle(document.querySelector('button[data-act=saveRun]')).backgroundColor) === 'rgb(110, 168, 254)');
     await p.click('button:has-text("Save")');
     check('saved run → History, Back → Home', await where() === '#/history' && await back() === '#/');
     await tab('More'); await p.click('a[href="#/body"]');

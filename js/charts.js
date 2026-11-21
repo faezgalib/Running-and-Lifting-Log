@@ -40,11 +40,19 @@ export function lineChart(series, { yLabel = '', xFmt = d => `${d.getDate()}/${d
   for (const s of series) {
     const sp = [...s.points].sort((a, b) => a.x - b.x);
     if (sp.length > 1) g += `<polyline fill="none" stroke="${s.color}" stroke-width="1.6" ${s.dashed ? 'stroke-dasharray="4 3"' : ''} stroke-opacity=".7" points="${sp.map(p => `${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ')}"/>`;
-    for (const p of sp) g += `<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="3" fill="${p.color || s.color}" data-tip="${esc(p.label || '')}"><title>${esc(p.label || '')}</title></circle>`;
+    for (const p of sp) g += pointSvg(X(p.x), Y(p.y), p.color || s.color, p.shape, p.label);
   }
   if (yLabel) g += `<text x="${P.l}" y="9" class="ax">${esc(yLabel)}</text>`;
   if (cornerNote) g += `<text x="${W - P.r}" y="9" class="ax note" text-anchor="end">${esc(cornerNote)}</text>`;
   return `<div class="chartbox"><svg viewBox="0 0 ${W} ${h}" class="chart tappable" role="img" aria-label="${esc(yLabel)}">${g}</svg></div>`;
+}
+
+// shape: 'dot' (default, filled), 'hollow' (outline only), 'ring' (larger, white outline).
+function pointSvg(x, y, color, shape, label) {
+  const c = `cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" data-tip="${esc(label || '')}"`, t = `<title>${esc(label || '')}</title>`;
+  if (shape === 'hollow') return `<circle ${c} r="3.2" fill="var(--surface)" stroke="${color}" stroke-width="1.5">${t}</circle>`;
+  if (shape === 'ring') return `<circle ${c} r="5" fill="${color}" stroke="var(--text)" stroke-width="1.5">${t}</circle>`;
+  return `<circle ${c} r="3" fill="${color}">${t}</circle>`;
 }
 
 /** Show the label of the point nearest to a tap on a line chart. Returns true if handled. */

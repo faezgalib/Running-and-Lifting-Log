@@ -101,7 +101,7 @@ Two tabs so charts never mix: **Lifting | Running**.
 - **Lifting**, in two titled sections:
   - **Exercise progress** (top, used most): one exercise chosen from a searchable A–Z list. Two centred buttons of equal width: **Weight** (opens first) = the heaviest weight actually lifted in each session, and **Est. 1RM**. Points are coloured by location. Tap the chart to see the nearest point's date and weight × reps (phones have no hover). Below the chart, **Recent sessions**: the last 5 sessions with weight × reps per set ("47.5 kg × 10, 10 · 45 kg × 11"; left/right as "R10/L9"), location and set count; tap a row to open the session. Left vs Right chart for unilateral exercises.
   - **Weekly overview** (all exercises): muscle map (this week / last week), working sets per week.
-- **Running**: km per week, and pace for every run. The pace axis is inverted (faster = higher, marked "faster ↑"). Km per week bars use the app green. Pace points keep their run-type colours (Outdoor blue, Treadmill orange, Race red).
+- **Running** (in running blue): km per week, and pace. The pace axis is inverted (faster = higher, marked "faster ↑"). Pace has three centred buttons, **Outdoor** (opens first) | Treadmill | All, because treadmill pace is not comparable with outdoor pace. Run type is shown by the point's shape, not colour: filled = outdoor, hollow = treadmill, large with a white ring = race.
 
 Body weight lives in **More → Body weight**: chart, quick add, and the list of entries.
 
@@ -135,6 +135,13 @@ Shown at the bottom of More. v2.0 = first full release after the initial build (
 - "Stretching" rows → mobility with duration.
 - Notes "Kiri beda N" → Left = Right − N for unilateral exercises. All other notes are kept as text.
 - Weights are imported exactly as recorded (some exercises are a total of 2 dumbbells).
+
+## Colours
+One meaning per colour, taken from the logo:
+- **Green** (#5fd0a6, the barbell) = lifting, and the app's general accent.
+- **Blue** (#6ea8fe, the run line) = running: the Run button and "km run" on Home, the race countdown, Log a run, Races, and Progress → Running.
+- **Purple / orange / red** = locations only (Home / Gym / Offshore), as small dots and badges. They are never used for anything else.
+Keep it to these; no new colours for other features.
 
 ## Home screen
 Design option A ("Poster"), Android system font, same colours as the rest of the app:

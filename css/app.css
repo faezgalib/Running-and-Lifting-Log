@@ -7,9 +7,12 @@
   --muted: #8a919b;
   --accent: #5fd0a6;
   --accent-ink: #0b1a14;
+  /* Colour rule: green = lifting, blue = running (both from the logo), orange/red = locations only. */
+  --run: #6ea8fe;
+  --run-ink: #0b1424;
   --danger: #f07167;
   --warn: #f2c14e;
-  --home: #6ea8fe;
+  --home: #b794f6;
   --gym: #f2b35a;
   --off: #ff7a59;
   --r: 14px;
@@ -227,7 +230,8 @@ table.rec td.kg small { display: block; font-weight: 400; font-size: 11.5px; col
 
 /* v2.6 Progress: centred Weight / Est. 1RM, tap a chart point, recent sessions */
 .chips.center { justify-content: center; gap: 8px; }
-.chips.center .chip { min-width: 120px; text-align: center; }
+.chips.center { flex-wrap: nowrap; }
+.chips.center .chip { flex: 0 1 120px; min-width: 0; text-align: center; }
 .chartbox { position: relative; }
 .chartbox .tip { position: absolute; background: var(--surface2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; font-size: 12px; color: var(--text); white-space: nowrap; pointer-events: none; z-index: 2; }
 .chart circle.hit { stroke: var(--text); stroke-width: 2; }
@@ -252,3 +256,13 @@ table.rec td.kg small { display: block; font-weight: 400; font-size: 11.5px; col
 .pbrow .was { font-size: 12.5px; color: var(--muted); }
 .badge.pb, .pbnote .badge { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 800; border-radius: 6px; padding: 1px 6px; letter-spacing: .04em; }
 .pbnote { font-size: 12.5px; color: var(--muted); margin: -2px 0 4px 30px; }
+/* Running uses the logo blue: anything inside .run-theme takes blue as its accent. */
+.run-theme { --accent: var(--run); --accent-ink: var(--run-ink); }
+.cta .btn.run { border-color: var(--run); }
+.cta .btn.run .t { color: var(--run); }
+.wk .km b { color: var(--run); }
+.tabs button.on.run { color: var(--run); }
+.legend.shapes i { width: 9px; height: 9px; border-radius: 50%; box-sizing: border-box; }
+.legend.shapes i.dot { background: var(--run); }
+.legend.shapes i.hollow { border: 1.5px solid var(--run); background: transparent; }
+.legend.shapes i.ring { width: 11px; height: 11px; background: var(--run); border: 1.5px solid var(--text); vertical-align: -1px; }

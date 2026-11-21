@@ -4,7 +4,7 @@ import {
   num, fmtKg, e1rm, daysBetween, downloadFile, toCSV,
 } from './util.js';
 import { classify, STARTER, GROUPS, defaultStep, effStep, ADDED_V24, ALIASES } from './seed.js';
-import { recommend, learnFactors, repsOf, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict } from './recommend.js';
+import { recommend, learnFactors, repsOf, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict, bestBefore, pbSets } from './recommend.js';
 import { convertHevy } from './hevy.js';
 import { lineChart, barChart, legend, LOC_COLORS, chartTap } from './charts.js';
 import { muscleVolume, muscleFigure, shadeLegend } from './muscles.js';
@@ -553,6 +553,7 @@ function entryCard(s, e, ei) {
   const fields = ex.format === 'hold' ? (sides(ex) ? ['secR', 'secL'] : ['sec'])
     : ex.format === 'dist' ? ['m']
     : [...(ex.format === 'wr' ? ['w'] : []), ...(sides(ex) ? ['rR', 'rL'] : ['r'])];
+  const pbs = livePbs(s, e, ex);
   const rows = e.sets.map((st, si) => {
     const d = setDefaults(s, e, si);
     const inputs = fields.map(f => `<input inputmode="decimal" data-e="${ei}" data-s="${si}" data-f="${f}" value="${st[f] ?? ''}" placeholder="${d[f] ?? ''}">`).join('');
@@ -560,6 +561,7 @@ function entryCard(s, e, ei) {
     const dropFields = sides(ex) ? [['w', 'kg'], ['rR', 'R reps'], ['rL', 'L reps']] : [['w', 'kg'], ['r', 'reps']];
     const drops = (st.drop || []).map((dp, di) => `<div class="setrow drop dcols${dropFields.length}"><span class="sn">↳</span>${dropFields.map(([f, ph]) => `<input inputmode="decimal" data-e="${ei}" data-s="${si}" data-d="${di}" data-f="${f}" value="${dp[f] ?? ''}" placeholder="${ph}">`).join('')}<button class="icon" data-act="rmDrop" data-e="${ei}" data-s="${si}" data-d="${di}">×</button></div>`).join('');
     return `<div class="setrow cols${fields.length}"><span class="sn">${si + 1}</span>${inputs}<button class="done ${st.doneAt ? 'on' : ''}" data-act="done" data-e="${ei}" data-s="${si}" aria-label="Set done">✓</button></div>
+      ${pbs[si] ? `<div class="pbnote"><span class="badge">PB</span> ${pbs[si]}</div>` : ''}
       ${drops}
       <div class="setmeta">${rest != null ? `<span class="muted small">rest ${fmtDur(rest)}</span>` : '<span></span>'}
         <span>${ex.format === 'wr' ? `<button class="link small" data-act="addDrop" data-e="${ei}" data-s="${si}">+ drop</button>` : ''}<button class="link small" data-act="rmSet" data-e="${ei}" data-s="${si}">remove</button></span></div>`;
@@ -608,14 +610,32 @@ routes.session = function session(id) {
   ${histHtml()}`;
 };
 
-// Positive line above the muscle map, only right after Finish.
+// Positive line above the muscle map, only right after Finish; personal bests get their own card.
+const setText = (st, ex) => setsLine({ sets: [st] }, ex);
 function ackHtml(s, dur) {
   const v = sessionVerdict(s, S.sessions, exById);
   const n = s.entries.length;
   const sets = s.entries.reduce((a, e) => { const ex = exById(e.exId); return a + (ex ? workingSets(e, ex).length : 0); }, 0);
   const mins = dur >= 60 ? ` · ${Math.round(dur / 60)} min` : '';
-  const pr = v.best ? `<div class="pr">New best · ${esc(v.best.name)} ${v.best.w ? `${fmtKg(v.best.w)} kg × ${v.best.r}` : `${v.best.r} reps`}</div>` : '';
-  return `<div class="ack ${v.kind}"><div class="big">${v.title}</div><div class="line">${n} exercise${n === 1 ? '' : 's'} · ${sets} set${sets === 1 ? '' : 's'}${mins}</div>${pr}</div>`;
+  const card = v.bests.length ? `<section class="card pbcard"><div class="pbhead"><span class="medal">PB</span>${v.bests.length === 1 ? 'Personal best' : `${v.bests.length} personal bests`}</div>
+    ${v.bests.map(b => `<div class="pbrow"><div class="n">${esc(b.name)}</div><div class="v">${esc(setText(b.set, b.ex))}</div><div class="was">was ${esc(setText(b.prev.set, b.ex))} · ${fmtShort(b.prev.date)}</div></div>`).join('')}
+  </section>` : '';
+  return `<div class="ack ${v.kind}"><div class="big">${v.title}</div><div class="line">${n} exercise${n === 1 ? '' : 's'} · ${sets} set${sets === 1 ? '' : 's'}${mins}</div></div>${card}`;
+}
+
+// Personal bests among the sets marked done in a running session: { setIndex: note }.
+function livePbs(s, e, ex) {
+  if (!isLift(ex)) return {};
+  const prev = bestBefore(ex, S.sessions, s);
+  const done = e.sets.map((st, i) => [st, i]).filter(([st]) => st.doneAt);
+  const out = {};
+  let ref = prev;
+  for (const k of pbSets(done.map(([st]) => st), ex, prev)) {
+    const [st, i] = done[k], w = st.w || 0, r = repsOf(st, ex);
+    out[i] = w > ref.w ? `heaviest ever (was ${fmtKg(ref.w)} kg)` : w ? `most reps at ${fmtKg(w)} kg (was ${ref.r})` : `most reps (was ${ref.r})`;
+    ref = { w, r };
+  }
+  return out;
 }
 
 // ---------- muscle map card ----------
@@ -1053,6 +1073,8 @@ const actions = {
     const d = setDefaults(s, e, si);
     for (const k of ['w', 'r', 'rL', 'rR', 'sec', 'secL', 'secR', 'm']) if (st[k] == null && d[k] != null) st[k] = d[k];
     st.doneAt = Date.now();
+    const ex = exById(e.exId);
+    if (livePbs(s, e, ex)[si]) toast(`Personal best · ${setText(st, ex)}`);
   }),
   emv: el => withSession(s => {
     const i = +el.dataset.i, j = i + +el.dataset.d;

@@ -8,7 +8,7 @@ import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { sampleHevyCsv, OFFSHORE_PERIOD } from './fixtures.mjs';
-import { recommend, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict } from '../js/recommend.js';
+import { recommend, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict, pbSets } from '../js/recommend.js';
 import { classify } from '../js/seed.js';
 import { parseDur, fmtDur } from '../js/util.js';
 import { muscleVolume } from '../js/muscles.js';
@@ -78,6 +78,15 @@ function unitTests() {
   check('targets missed → still positive "Done. Every session counts."', v.title === 'Done. Every session counts.', JSON.stringify(v));
   v = sessionVerdict(day('b', '2026-11-08T07:00', [{ w: 30, r: 10 }]), [], id => exs[id]);
   check('first time doing an exercise is not called a new best', v.kind === 'done', JSON.stringify(v));
+
+  section('Personal bests');
+  const rec = { w: 50, r: 10 };
+  check('PB: heavier, or more reps at the same weight', pbSets([{ w: 50, r: 10 }, { w: 50, r: 11 }, { w: 52.5, r: 6 }], press, rec).join() === '1,2');
+  check('PB: a set equal to the new best is not a second PB', pbSets([{ w: 55, r: 8 }, { w: 55, r: 8 }], press, rec).join() === '0');
+  check('PB: left/right uses the weaker side', pbSets([{ w: 12, rR: 12, rL: 9 }], cc, { w: 12, r: 9 }).length === 0 && pbSets([{ w: 12, rR: 11, rL: 10 }], cc, { w: 12, r: 9 }).join() === '0');
+  check('PB: no earlier record → no PB', pbSets([{ w: 80, r: 5 }], press, null).length === 0);
+  v = sessionVerdict(day('b', '2026-11-08T07:00', [{ w: 52.5, r: 8 }, { w: 50, r: 10 }]), [old], id => exs[id]);
+  check('PB card lists the new best and the old record', v.bests.length === 1 && v.bests[0].prev.w === 50 && v.bests[0].prev.r === 10 && v.bests[0].prev.date === '2026-11-01T07:00', JSON.stringify(v.bests.map(b => b.prev)));
 
   section('Duration typing');
   const cases = { '003000': '30:00', '3000': '30:00', '4530': '45:30', '13000': '1:30:00', '45': '45:00', '45:30': '45:30', '1:30:00': '1:30:00' };
@@ -179,7 +188,10 @@ async function browserTests() {
     await p.click('button:has-text("Start")');
     const bench = p.locator('.ex').nth(0), curl = p.locator('.ex').nth(1);
     await bench.locator('button.done').nth(0).click(); await p.waitForTimeout(1100);
+    await bench.locator('.setrow').nth(1).locator('input').first().fill('99');
     await bench.locator('button.done').nth(1).click();
+    check('PB badge on the set during the session', /heaviest ever/.test(await bench.locator('.pbnote').innerText().catch(() => '')));
+    check('Personal best toast', await p.locator('.toast', { hasText: 'Personal best · 99 kg' }).count() === 1, (await p.locator('.toast').allInnerTexts()).join(' | '));
     await bench.locator('button.chip:has-text("1")').click();
     await curl.locator('button.done').nth(0).click();
     await curl.locator('button[data-act=addDrop]').first().click();
@@ -194,6 +206,7 @@ async function browserTests() {
     check('summary shows the muscle map without numbers', !/\bsets?\b/.test(await p.locator('.musclemap').textContent()));
     const ackText = await p.locator('.ack .big').innerText().catch(() => '');
     check('positive line after Finish', ['You beat it today.', 'You nailed it.', 'Done. Every session counts.'].includes(ackText), ackText);
+    check('Personal best card after Finish', /Bench Press[\s\S]*99 kg[\s\S]*was /.test(await p.locator('.pbcard').innerText().catch(() => '')));
     check('line sits above the muscle map', await p.evaluate(() => { const a = document.querySelector('.ack'), m = document.querySelector('.musclemap'); return !!a && !!m && (a.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING) > 0; }));
     check('summary keeps the drop set (R/L)', (await p.locator('main').innerText()).includes('8×R6/L5'));
     check('Back after Finish goes Home (not to the finished session)', await back() === '#/');

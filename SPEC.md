@@ -60,10 +60,15 @@ Races: name, date, distance, target time, linked result → countdown on home sc
 
 ## After Finish
 Right after Finish, a short positive line sits above the muscle map, with "N exercises · N sets · N min" under it. It is chosen from the session, always positive:
-- **You beat it today.** — a lift beat its previous best (heavier than ever, or more reps at the same top weight), with a small "New best · exercise weight × reps". A first-ever exercise does not count.
+- **You beat it today.** — at least one lift set a personal best. A **Personal best** card (green border) follows, listing each one: the new set in large green ("55 kg × 8") and the old record under it ("was 52.5 kg × 10 · 14 Nov").
 - **You nailed it.** — every planned target was hit.
 - **Done. Every session counts.** — any other day (a miss is never mentioned).
 It shows only once; opening the session later from History does not show it. The muscle map itself is unchanged.
+
+## Personal best
+A set is a personal best when it is heavier than any earlier main set of that exercise, or has more reps at the same weight (weaker side for left/right; drop sets not counted). A first-ever exercise has no record to beat, so it is not a personal best.
+- **During the session**: when a set marked done is a personal best, a green **PB** badge appears under it ("heaviest ever (was 52.5 kg)" or "most reps at 50 kg (was 10)") and a short "Personal best · 55 kg × 8" message shows.
+- **After Finish**: the Personal best card (see After Finish).
 
 ## Mobility and core
 Logged inside any session. Formats: reps / hold / distance, optional per side. No progression recommendation.

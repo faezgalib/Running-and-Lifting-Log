@@ -241,4 +241,14 @@ table.rec td.kg small { display: block; font-weight: 400; font-size: 11.5px; col
 .ack { text-align: center; padding: 14px 4px 6px; }
 .ack .big { font-size: 24px; font-weight: 650; letter-spacing: -.01em; }
 .ack .line { font-size: 13px; color: var(--muted); margin-top: 4px; }
-.ack .pr { display: inline-block; margin-top: 8px; font-size: 12.5px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 999px; padding: 3px 10px; }
+/* Personal best: card after Finish and badge during the session (app green only) */
+.pbcard { border: 1.5px solid var(--accent); background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--surface)), var(--surface) 70%); }
+.pbhead { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 15px; margin-bottom: 4px; }
+.medal { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 11px; font-weight: 800; }
+.pbrow { padding: 8px 0; border-top: 1px solid var(--line); }
+.pbhead + .pbrow { border-top: 0; }
+.pbrow .n { font-size: 14px; font-weight: 600; }
+.pbrow .v { font-size: 18px; font-weight: 650; color: var(--accent); margin-top: 2px; }
+.pbrow .was { font-size: 12.5px; color: var(--muted); }
+.badge.pb, .pbnote .badge { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 800; border-radius: 6px; padding: 1px 6px; letter-spacing: .04em; }
+.pbnote { font-size: 12.5px; color: var(--muted); margin: -2px 0 4px 30px; }

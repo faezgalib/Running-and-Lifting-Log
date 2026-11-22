@@ -103,6 +103,8 @@ Two tabs so charts never mix: **Lifting | Running**.
   - **Weekly overview** (all exercises): muscle map (this week / last week), working sets per week.
 - **Running** (in running blue): km per week, and pace. The pace axis is inverted (faster = higher, marked "faster ↑"). Pace has three centred buttons, **Outdoor** (opens first) | Treadmill | All, because treadmill pace is not comparable with outdoor pace. Run type is shown by the point's shape, not colour: filled = outdoor, hollow = treadmill, large with a white ring = race.
 
+Chart axes always use whole numbers with round steps (13, 14 … 18 kg; 0, 10, 20 km; pace in round steps such as 7:00, 7:10, 7:20), so 17.5 kg sits between 17 and 18.
+
 Body weight lives in **More → Body weight**: chart, quick add, and the list of entries.
 
 ## Navigation (Back button)

@@ -5,36 +5,42 @@ export const LOC_COLORS = { Home: 'var(--home)', Gym: 'var(--gym)', Offshore: 'v
 
 const W = 340, H = 180, P = { l: 34, r: 10, t: 12, b: 24 };
 
-function scale(vals, pad = 0.08) {
-  let min = Math.min(...vals), max = Math.max(...vals);
-  if (min === max) { min -= 1; max += 1; }
-  const d = (max - min) * pad;
-  return [min - d, max + d];
+// Y axis with round numbers: the smallest step from `steps` that needs at most `maxN` intervals.
+// 13.5–17.5 kg → 13, 14, 15, 16, 17, 18 (17.5 sits between 17 and 18). Always whole numbers with the default steps.
+export const STEPS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
+export function niceAxis(min, max, steps = STEPS, maxN = 5) {
+  if (min === max) { min -= steps[0]; max += steps[0]; }
+  let list = steps, step;
+  for (;;) {
+    step = list.find(s => Math.ceil(max / s) - Math.floor(min / s) <= maxN);
+    if (step) break;
+    list = list.map(s => s * 10);
+  }
+  const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step;
+  const ticks = [];
+  for (let v = lo; v <= hi + step / 2; v += step) ticks.push(v);
+  return { lo, hi, ticks };
 }
 
-function ticks(min, max, n = 4) {
-  const step = (max - min) / n;
-  return Array.from({ length: n + 1 }, (_, i) => min + step * i);
-}
-
-const fmtTick = v => (Math.abs(v) >= 100 ? Math.round(v) : +v.toFixed(1));
+const fmtTick = v => String(Math.round(v));
 
 /**
  * series: [{ name, color, points: [{ x: Date|number, y, color?, label? }], dashed? }]
  * Tapping the chart shows the label of the nearest point (phones have no hover).
  */
-export function lineChart(series, { yLabel = '', xFmt = d => `${d.getDate()}/${d.getMonth() + 1}`, yFmt = fmtTick, height = H, invert = false, cornerNote = '' } = {}) {
+export function lineChart(series, { yLabel = '', xFmt = d => `${d.getDate()}/${d.getMonth() + 1}`, yFmt = fmtTick, height = H, invert = false, cornerNote = '', steps = STEPS } = {}) {
   const pts = series.flatMap(s => s.points);
   if (pts.length < 1) return `<p class="muted small">Not enough data yet.</p>`;
   const xs = pts.map(p => +p.x), ys = pts.map(p => p.y);
   const [x0, x1] = xs.length > 1 && Math.min(...xs) !== Math.max(...xs) ? [Math.min(...xs), Math.max(...xs)] : [Math.min(...xs) - 864e5, Math.max(...xs) + 864e5];
-  const [y0, y1] = scale(ys);
+  const axis = niceAxis(Math.min(...ys), Math.max(...ys), steps);
+  const [y0, y1] = [axis.lo, axis.hi];
   const h = height;
   const X = x => P.l + ((+x - x0) / (x1 - x0)) * (W - P.l - P.r);
   // invert: smaller values plotted higher (e.g. pace, where lower = faster).
   const Y = y => invert ? P.t + ((y - y0) / (y1 - y0)) * (h - P.t - P.b) : h - P.b - ((y - y0) / (y1 - y0)) * (h - P.t - P.b);
   let g = '';
-  for (const t of ticks(y0, y1)) g += `<line x1="${P.l}" x2="${W - P.r}" y1="${Y(t)}" y2="${Y(t)}" class="grid"/><text x="${P.l - 4}" y="${Y(t) + 3}" class="ax" text-anchor="end">${esc(yFmt(t))}</text>`;
+  for (const t of axis.ticks) g += `<line x1="${P.l}" x2="${W - P.r}" y1="${Y(t)}" y2="${Y(t)}" class="grid"/><text x="${P.l - 4}" y="${Y(t) + 3}" class="ax" text-anchor="end">${esc(yFmt(t))}</text>`;
   const xt = [x0, (x0 + x1) / 2, x1];
   xt.forEach((t, i) => { g += `<text x="${X(t)}" y="${h - 6}" class="ax" text-anchor="${['start', 'middle', 'end'][i]}">${esc(xFmt(new Date(t)))}</text>`; });
   for (const s of series) {
@@ -84,16 +90,16 @@ export function chartTap(ev) {
 /** bars: [{ label, value, color? }] */
 export function barChart(bars, { yLabel = '', height = H, color = 'var(--accent)' } = {}) {
   if (!bars.length) return `<p class="muted small">Not enough data yet.</p>`;
-  const max = Math.max(...bars.map(b => b.value), 1) * 1.1;
+  const axis = niceAxis(0, Math.max(...bars.map(b => b.value), 1)), max = axis.hi;
   const h = height;
   const bw = (W - P.l - P.r) / bars.length;
   const Y = v => h - P.b - (v / max) * (h - P.t - P.b);
   let g = '';
-  for (const t of ticks(0, max)) g += `<line x1="${P.l}" x2="${W - P.r}" y1="${Y(t)}" y2="${Y(t)}" class="grid"/><text x="${P.l - 4}" y="${Y(t) + 3}" class="ax" text-anchor="end">${fmtTick(t)}</text>`;
+  for (const t of axis.ticks) g += `<line x1="${P.l}" x2="${W - P.r}" y1="${Y(t)}" y2="${Y(t)}" class="grid"/><text x="${P.l - 4}" y="${Y(t) + 3}" class="ax" text-anchor="end">${fmtTick(t)}</text>`;
   const every = Math.ceil(bars.length / 6);
   bars.forEach((b, i) => {
     const x = P.l + i * bw + bw * 0.15;
-    g += `<rect x="${x.toFixed(1)}" y="${Y(b.value).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${(h - P.b - Y(b.value)).toFixed(1)}" rx="2" fill="${b.color || color}"><title>${esc(b.label)}: ${fmtTick(b.value)}</title></rect>`;
+    g += `<rect x="${x.toFixed(1)}" y="${Y(b.value).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${(h - P.b - Y(b.value)).toFixed(1)}" rx="2" fill="${b.color || color}"><title>${esc(b.label)}: ${+(+b.value).toFixed(1)}</title></rect>`;
     if (i % every === 0) g += `<text x="${(x + bw * 0.35).toFixed(1)}" y="${h - 6}" class="ax" text-anchor="middle">${esc(b.label)}</text>`;
   });
   if (yLabel) g += `<text x="${P.l}" y="9" class="ax">${esc(yLabel)}</text>`;

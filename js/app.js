@@ -14,7 +14,7 @@ const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], me
 let draft = null;          // plan being built
 let ui = { paceView: 'outdoor', histFilter: 'all', progEx: null, progMetric: 'top', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.9';
+const APP_VERSION = 'v2.10';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
@@ -792,7 +792,7 @@ routes.progress = function progress() {
   </section>
   <section class="card"><h3>Pace</h3>
     ${chips('paceView', [['outdoor', 'Outdoor'], ['treadmill', 'Treadmill'], ['all', 'All']], paceView).replace('class="chips"', 'class="chips center"')}
-    ${lineChart([{ name: 'pace', color: 'var(--run)', points: paces }], { yLabel: 'min/km', yFmt: v => fmtDur(v), invert: true, cornerNote: 'faster ↑' })}
+    ${lineChart([{ name: 'pace', color: 'var(--run)', points: paces }], { yLabel: 'min/km', yFmt: v => fmtDur(v), invert: true, cornerNote: 'faster ↑', steps: [5, 10, 15, 30, 60, 120] })}
     <div class="legend shapes">${[['dot', 'Outdoor'], ['hollow', 'Treadmill'], ['ring', 'Race']].filter(([k]) => shapesShown.has(k)).map(([k, l]) => `<span><i class="${k}"></i>${l}</span>`).join('')}</div>
   </section></div>`;
   return `<header class="top"><h1>Progress</h1></header>

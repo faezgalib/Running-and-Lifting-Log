@@ -12,6 +12,7 @@ import { recommend, workingSets, entryBest, heaviestSet, setsLine, sessionVerdic
 import { classify } from '../js/seed.js';
 import { parseDur, fmtDur } from '../js/util.js';
 import { muscleVolume } from '../js/muscles.js';
+import { niceAxis } from '../js/charts.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -87,6 +88,13 @@ function unitTests() {
   check('PB: no earlier record → no PB', pbSets([{ w: 80, r: 5 }], press, null).length === 0);
   v = sessionVerdict(day('b', '2026-11-08T07:00', [{ w: 52.5, r: 8 }, { w: 50, r: 10 }]), [old], id => exs[id]);
   check('PB card lists the new best and the old record', v.bests.length === 1 && v.bests[0].prev.w === 50 && v.bests[0].prev.r === 10 && v.bests[0].prev.date === '2026-11-01T07:00', JSON.stringify(v.bests.map(b => b.prev)));
+
+  section('Chart axis: round numbers');
+  check('13.5–17.5 kg → 13, 14 … 18', niceAxis(13.5, 17.5).ticks.join() === '13,14,15,16,17,18', niceAxis(13.5, 17.5).ticks.join());
+  check('one value (9 kg) → 8, 9, 10', niceAxis(9, 9).ticks.join() === '8,9,10');
+  check('bars start at 0 with round steps', niceAxis(0, 33).ticks.join() === '0,10,20,30,40', niceAxis(0, 33).ticks.join());
+  check('every tick is a whole number', [[13.2, 17.8], [0.5, 1.1], [62.3, 71.9], [-14, 9], [40, 160]].every(([a, b]) => niceAxis(a, b).ticks.every(Number.isInteger)));
+  check('pace axis steps of 15/30 s (6:57–7:43 → 6:45 … 7:45)', niceAxis(417, 463, [5, 10, 15, 30, 60, 120]).ticks.join() === '405,420,435,450,465', niceAxis(417, 463, [5, 10, 15, 30, 60, 120]).ticks.join());
 
   section('Duration typing');
   const cases = { '003000': '30:00', '3000': '30:00', '4530': '45:30', '13000': '1:30:00', '45': '45:00', '45:30': '45:30', '1:30:00': '1:30:00' };
@@ -268,6 +276,9 @@ async function browserTests() {
     check('chosen exercise shown', (await p.locator('.selectbtn').innerText()).includes('Goblet Squat'));
     check('Progress opens on Weight, then Est. 1RM', (await p.locator('.chips.center .chip').allInnerTexts()).join('|') === 'Weight|Est. 1RM' && (await p.locator('.chips.center .chip.on').innerText()) === 'Weight');
     check('best box says "heaviest" in kg', /heaviest/.test(await p.locator('.stats').innerText()) && /kg/.test(await p.locator('.stats div').first().innerText()));
+    const yTicks = sel => p.locator(sel).evaluateAll(svgs => svgs.flatMap(s => [...s.querySelectorAll('text.ax[x="30"]')].map(t => t.textContent)));
+    const liftTicks = await yTicks('.chartbox svg.chart');
+    check('Progress Lifting: Y axis shows whole numbers only', liftTicks.length > 0 && liftTicks.every(t => /^-?\d+$/.test(t)), liftTicks.join(','));
     const progRows = await p.locator(".recent a.rs").allInnerTexts();
     check('Recent sessions: up to 5 rows with weight × reps', progRows.length > 0 && progRows.length <= 5 && progRows.every(t => /kg × \d/.test(t)), progRows[0]);
     const chartBox = await p.locator('.chartbox svg.chart').first().boundingBox();
@@ -276,10 +287,16 @@ async function browserTests() {
     await p.click('h2.sect');
     check('tapping elsewhere hides it', await p.locator('.chartbox .tip').count() === 0);
     await p.click('.chip:has-text("Est. 1RM")');
+    const rmTicks = await yTicks('.chartbox svg.chart');
+    check('Est. 1RM: Y axis shows whole numbers only', rmTicks.length > 0 && rmTicks.every(t => /^-?\d+$/.test(t)), rmTicks.join(','));
     check('Est. 1RM still available', /est\. 1RM/.test(await p.locator('svg.chart').first().innerHTML()) && /best/.test(await p.locator('.stats').innerText()));
     await p.click('.chip:has-text("Weight")');
     await p.click('.tabs button:has-text("Running")');
     check('pace chart marked "faster ↑"', await p.locator('text=faster ↑').count() === 1);
+    const kmTicks = await yTicks('section.card:has(h3:text("Running km per week")) svg');
+    check('km per week: whole numbers', kmTicks.length > 0 && kmTicks.every(t => /^\d+$/.test(t)), kmTicks.join(','));
+    const paceTicks = await yTicks('section.card:has(h3:text("Pace")) svg');
+    check('pace axis on round times (whole 5/10/15/30 s steps)', paceTicks.length > 0 && paceTicks.every(t => /:[0-5][05]$/.test(t)), paceTicks.join(','));
     const runFills = await p.locator('section.card:has(h3:text("Running km per week")) rect').evaluateAll(rs => [...new Set(rs.map(r => r.getAttribute('fill')))]);
     check('km per week bars are running blue', runFills.join() === 'var(--run)', runFills.join());
     check('Running tab label is blue', await p.evaluate(() => getComputedStyle(document.querySelector('.tabs button.on')).color) === 'rgb(110, 168, 254)');
@@ -336,6 +353,8 @@ async function browserTests() {
     check('saved run → History, Back → Home', await where() === '#/history' && await back() === '#/');
     await tab('More'); await p.click('a[href="#/body"]');
     await p.fill('#bwKg', '72'); await p.click('button:has-text("+ Add weight")'); await p.waitForTimeout(200);
+    const bwTicks = await yTicks('svg.chart');
+    check('body weight: whole numbers on the axis', bwTicks.length > 0 && bwTicks.every(t => /^\d+$/.test(t)), bwTicks.join(','));
     check('body weight page has a chart and the entry', await p.locator('.chart').count() === 1 && (await p.locator('main').innerText()).includes('72 kg'));
     check('Back: Body weight → More → Home', await back() === '#/more' && await back() === '#/');
     await p.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); await p.waitForTimeout(100);

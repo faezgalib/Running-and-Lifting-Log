@@ -153,7 +153,7 @@ Keep it to these; no new colours for other features.
 ## Home screen
 Design option A ("Poster"), Android system font, same colours as the rest of the app:
 - **Logo** (large, centred) with LIFT RUN JOURNEY underneath — the most prominent element.
-- **Daily line** second: thin type, centred, with the author in small green capitals. Sundays always show "No human is limited. — Eliud Kipchoge".
+- **Daily line** second: thin type, centred, with the author in small green capitals. Sundays always show "No human is limited. — Eliud Kipchoge". A special day can have its own line for that one date only (it wins over Sunday); the next day the normal line returns by itself.
 - Greeting by time of day and a last-30-days line (sessions and km).
 - Resume card (session in progress) and next race countdown when they apply.
 - **Lift** ("Start a session") / **Run** ("Log a finished run"), This week (sessions, working sets, km), and **Recent**: at most 5 rows, date on the left, one short line each ("6 exercises · 14 sets" / "4 km · 7:30/km"), location as a coloured dot, "See all" → History.

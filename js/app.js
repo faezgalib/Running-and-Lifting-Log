@@ -14,7 +14,7 @@ const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], me
 let draft = null;          // plan being built
 let ui = { paceView: 'outdoor', histFilter: 'all', progEx: null, progMetric: 'top', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.10';
+const APP_VERSION = 'v2.10.1';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
@@ -258,8 +258,11 @@ function greeting() {
   const h = new Date().getHours();
   return h < 11 ? 'Good morning' : h < 15 ? 'Good afternoon' : h < 19 ? 'Good evening' : 'Good night';
 }
+// One-day lines for special days (local date). Only that date shows it; the next day is back to normal.
+const SPECIAL_LINES = { '2026-11-22': 'Autobots, roll out. — Optimus Prime' };
 function dailyLine() {
   const d = new Date();
+  if (SPECIAL_LINES[isoDate(d)]) return SPECIAL_LINES[isoDate(d)];
   const doy = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
   if (d.getDay() === 0) return LINES[0]; // Sundays: Kipchoge
   return LINES[doy % LINES.length];

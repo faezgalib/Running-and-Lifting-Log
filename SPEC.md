@@ -89,6 +89,11 @@ Starter list plus common cable, machine, dumbbell and bodyweight exercises (v2.4
 
 ## Exercise picker
 **Recent** (5 most recently used) on top, clearly labelled. Everything else A–Z, grouped Lifts / Core / Mobility. Searching shows A–Z only.
+Search is forgiving:
+- Short forms: **RDL** (Romanian Deadlift), **DB** (dumbbell), **BB** (barbell).
+- Muscle names: "chest" also finds Bench Press; "hamstring curl" finds Lying and Seated Leg Curl.
+- Small typos: "bencg press" → Bench Press (1 typo from 4 letters, 2 from 8; short words like "row" must be exact).
+- When nothing matches by name, a **Did you mean** list shows up to 5 closest exercises (with the muscle that matched). "+ Create" stays below it with a note that a typo would make a separate history.
 
 ## Muscle map
 Labelled body figure (front/back toggle), one green scale with clearly separated steps. Labels show muscle names only (no numbers); the legend below explains the shades in sets.
@@ -153,7 +158,7 @@ Keep it to these; no new colours for other features.
 ## Home screen
 Design option A ("Poster"), Android system font, same colours as the rest of the app:
 - **Logo** (large, centred) with LIFT RUN JOURNEY underneath — the most prominent element.
-- **Daily line** second: thin type, centred, with the author in small green capitals. Sundays always show "No human is limited. — Eliud Kipchoge". A special day can have its own line for that one date only (it wins over Sunday); the next day the normal line returns by itself.
+- **Daily line** second: thin type, centred, with the author in small green capitals. Sundays always show "No human is limited. — Eliud Kipchoge".
 - Greeting by time of day and a last-30-days line (sessions and km).
 - Resume card (session in progress) and next race countdown when they apply.
 - **Lift** ("Start a session") / **Run** ("Log a finished run"), This week (sessions, working sets, km), and **Recent**: at most 5 rows, date on the left, one short line each ("6 exercises · 14 sets" / "4 km · 7:30/km"), location as a coloured dot, "See all" → History.

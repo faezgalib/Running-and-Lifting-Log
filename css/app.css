@@ -271,3 +271,5 @@ table.rec td.kg small { display: block; font-weight: 400; font-size: 11.5px; col
 .legend.shapes i.dot { background: var(--run); }
 .legend.shapes i.hollow { border: 1.5px solid var(--run); background: transparent; }
 .legend.shapes i.ring { width: 11px; height: 11px; background: var(--run); border: 1.5px solid var(--text); vertical-align: -1px; }
+/* Exercise search: suggestions when nothing matches by name */
+.sheetbody h3.dym { color: var(--accent); }

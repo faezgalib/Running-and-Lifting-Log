@@ -14,7 +14,7 @@ const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], me
 let draft = null;          // plan being built
 let ui = { paceView: 'outdoor', histFilter: 'all', progEx: null, progMetric: 'top', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.8';
+const APP_VERSION = 'v2.9';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];

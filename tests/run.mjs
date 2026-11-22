@@ -147,6 +147,8 @@ async function browserTests() {
     const colors = await p.evaluate(() => { const v = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim().toLowerCase(); return { run: v('--run'), home: v('--home'), gym: v('--gym'), off: v('--off'), accent: v('--accent'), btn: getComputedStyle(document.querySelector('.cta .btn.run')).borderTopColor }; });
     check('colour rule: green lift, blue run, Home/Gym/Offshore all different from both', colors.run === '#6ea8fe' && colors.accent === '#5fd0a6' && ![colors.run, colors.accent].some(c => [colors.home, colors.gym, colors.off].includes(c)), JSON.stringify(colors));
     check('Run button is blue', colors.btn === 'rgb(110, 168, 254)', colors.btn);
+    const sel = await p.evaluate(() => ({ text: getComputedStyle(document.querySelector('.wk b')).userSelect, body: getComputedStyle(document.body).userSelect }));
+    check('tapping text does not select it (no Touch to Search pop-up)', sel.text === 'none' && sel.body === 'none', JSON.stringify(sel));
     check('Home buttons: Lift / Run with descriptions', btns[0] === 'Lift Start a session' && btns[1] === 'Run Log a finished run', btns.join(' | '));
 
     section('Import from Hevy (fake data)');
@@ -327,6 +329,7 @@ async function browserTests() {
     section('Run, body weight, navigation');
     await tab('Home'); await p.click('button[data-h="#/run/new"]');
     await p.fill('[data-run=distKm]', '4'); await p.fill('[data-run=durSec]', '3000');
+    check('fields you type in stay selectable', await p.evaluate(() => getComputedStyle(document.querySelector('[data-run=distKm]')).userSelect) === 'text');
     check('"3000" on the number pad → pace 7:30/km', (await p.locator('#pace').innerText()) === '7:30/km');
     check('Log a run uses running blue', await p.evaluate(() => getComputedStyle(document.querySelector('button[data-act=saveRun]')).backgroundColor) === 'rgb(110, 168, 254)');
     await p.click('button:has-text("Save")');

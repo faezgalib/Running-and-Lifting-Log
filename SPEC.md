@@ -163,6 +163,7 @@ Design option A ("Poster"), Android system font, same colours as the rest of the
 - A new version reloads the app automatically, except while a session or run is being logged.
 - The browser checks for a new version when the app is opened from scratch. To check any time: **More → Check for updates** ("Updating…", "You're on the latest version", or "No internet").
 - Pull-to-refresh is disabled, so pulling the screen down never reloads the app like a web page.
+- Text on screen cannot be selected (fields you type in can), so tapping or pressing text never opens Chrome's Touch to Search or the iPhone copy menu.
 - Every release: bump `VERSION` in `sw.js` and `APP_VERSION` in `js/app.js` (shown at the bottom of More).
 
 ## Security

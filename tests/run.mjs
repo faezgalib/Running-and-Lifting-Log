@@ -132,6 +132,8 @@ async function browserTests() {
   const where = async () => { await p.waitForTimeout(250); const u = p.url(); return u.startsWith(URL) ? '#' + (u.split('#')[1] || '/') : 'LEFT APP'; };
   const back = async () => { await p.goBack().catch(() => {}); return where(); };
   const tab = name => p.click(`.tabbar a:has-text("${name}")`);
+  // The line after Finish must have no box and must not be cut off, for every kind (best / nailed / done).
+  const ackLooksRight = () => p.evaluate(() => { const a = document.querySelector('.ack'), b = a && a.querySelector('.big'); if (!a || !b) return 'missing'; const cs = getComputedStyle(a); return cs.backgroundColor === 'rgba(0, 0, 0, 0)' && cs.borderTopWidth === '0px' && a.scrollHeight <= a.clientHeight + 1 && a.getBoundingClientRect().bottom >= b.getBoundingClientRect().bottom ? 'ok' : `bg ${cs.backgroundColor} h ${a.clientHeight}/${a.scrollHeight}`; });
 
   try {
     await p.goto('about:blank');
@@ -210,12 +212,25 @@ async function browserTests() {
     const ackText = await p.locator('.ack .big').innerText().catch(() => '');
     check('positive line after Finish', ['You beat it today.', 'You nailed it.', 'Done. Every session counts.'].includes(ackText), ackText);
     check('Personal best card after Finish', /Bench Press[\s\S]*99 kg[\s\S]*was /.test(await p.locator('.pbcard').innerText().catch(() => '')));
+    const ackFirst = await ackLooksRight();
+    check('line after Finish has no box and is not cut off', ackFirst === 'ok', ackFirst);
     check('line sits above the muscle map', await p.evaluate(() => { const a = document.querySelector('.ack'), m = document.querySelector('.musclemap'); return !!a && !!m && (a.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING) > 0; }));
     check('summary keeps the drop set (R/L)', (await p.locator('main').innerText()).includes('8×R6/L5'));
     check('Back after Finish goes Home (not to the finished session)', await back() === '#/');
+    // A day with missed targets gets "Done. Every session counts." — it must look right too.
+    await p.click('button[data-act=newPlan]');
+    await p.click('text=+ Add exercise'); await p.locator('.pick', { hasText: 'Bench Press (Dumbbell)' }).first().click(); await p.click('button[data-act=closePicker]');
+    await p.click('.chip[data-name=location][data-val=Gym]'); await p.click('button:has-text("Start")');
+    await p.locator('.ex').nth(0).locator('.setrow').nth(0).locator('input').nth(1).fill('1');
+    await p.locator('.ex').nth(0).locator('button.done').nth(0).click();
+    await p.click('button:has-text("Finish")'); await p.waitForSelector('.musclemap');
+    check('missed targets → "Done. Every session counts."', (await p.locator('.ack .big').innerText()) === 'Done. Every session counts.');
+    const ackDone = await ackLooksRight();
+    check('"Done" line is not squeezed into a grey box', ackDone === 'ok', ackDone);
+    await back();
 
     section('Exercise history and Progress');
-    await tab('History'); await p.locator('.list a.row[href^="#/session"]').first().click();
+    await tab('History'); await p.locator('.list a.row[href^="#/session"]', { hasText: 'Concentration Curl' }).first().click();
     check('old session from History has no "after Finish" line', await p.locator('.ack').count() === 0);
     await p.locator('.exname', { hasText: 'Bench Press' }).first().click();
     check('exercise panel opens on Records', (await p.locator('.seg button.on').innerText()) === 'Records' && await p.locator('table.rec').count() === 1);

@@ -14,7 +14,7 @@ const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], me
 let draft = null;          // plan being built
 let ui = { paceView: 'outdoor', histFilter: 'all', progEx: null, progMetric: 'top', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.7';
+const APP_VERSION = 'v2.8';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
@@ -620,7 +620,7 @@ function ackHtml(s, dur) {
   const card = v.bests.length ? `<section class="card pbcard"><div class="pbhead"><span class="medal">PB</span>${v.bests.length === 1 ? 'Personal best' : `${v.bests.length} personal bests`}</div>
     ${v.bests.map(b => `<div class="pbrow"><div class="n">${esc(b.name)}</div><div class="v">${esc(setText(b.set, b.ex))}</div><div class="was">was ${esc(setText(b.prev.set, b.ex))} · ${fmtShort(b.prev.date)}</div></div>`).join('')}
   </section>` : '';
-  return `<div class="ack ${v.kind}"><div class="big">${v.title}</div><div class="line">${n} exercise${n === 1 ? '' : 's'} · ${sets} set${sets === 1 ? '' : 's'}${mins}</div></div>${card}`;
+  return `<div class="ack" data-kind="${v.kind}"><div class="big">${v.title}</div><div class="line">${n} exercise${n === 1 ? '' : 's'} · ${sets} set${sets === 1 ? '' : 's'}${mins}</div></div>${card}`;
 }
 
 // Personal bests among the sets marked done in a running session: { setIndex: note }.

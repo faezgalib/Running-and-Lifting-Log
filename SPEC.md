@@ -121,6 +121,11 @@ Shown at the bottom of More. v2.0 = first full release after the initial build (
 ## Tests
 `node tests/run.mjs` before every pull request (see `tests/README.md`). Fake data only.
 
+## Known issues (watching)
+- iPhone (iOS 26.5, home-screen app): once, the bottom menu moved down while scrolling and its labels were partly hidden. It could not be repeated (not after reopening, not after using the keyboard), so nothing was changed. If it comes back, note what was done just before.
+
+Tested on iPhone 13 (iOS 26.5): install to home screen, restore, typing kg/reps (no zoom, comma decimals), panels with Close, Log a run, Progress, Share backup, offline.
+
 ## Data
 - **Share backup**: one tap opens the Android share sheet (Gmail, Drive, WhatsApp) so the file leaves the phone. The shared file ends in `.txt` (Android only shares certain file types; the content is the same JSON). Falls back to saving in Downloads where sharing is not available. Restore accepts `.json` and `.txt`. **Save to phone** keeps the plain download.
 - **Restore** first shows what is in the file (date, sessions, runs, body weight) next to what is on the phone, then asks before replacing everything.

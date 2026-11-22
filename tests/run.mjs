@@ -398,7 +398,7 @@ async function browserTests() {
     check('app opens offline', await p.locator('.hero').count() === 1);
     await ctx.setOffline(false);
     await tab('More');
-    const ver = ((await p.locator('main').innerText()).match(/v\d+\.\d+/) || [''])[0];
+    const ver = ((await p.locator('main').innerText()).match(/v\d+(?:\.\d+)+/) || [''])[0];
     const swv = /VERSION = 'lrj-([\d.]+)'/.exec(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'))?.[1];
     check(`version shown (${ver}) matches sw.js (${swv})`, ver === `v${swv}`);
 
@@ -412,6 +412,20 @@ async function browserTests() {
     await p.click('button[data-act=checkUpdate]'); await p.waitForTimeout(300);
     check('Check for updates while offline says "No internet"', (await p.locator('.toast').allInnerTexts()).some(t => /No internet/.test(t)));
     await ctx.setOffline(false);
+    section('Special day line');
+    const lineOn = async when => {
+      const c = await browser.newContext({ viewport: { width: 400, height: 860 } });
+      await c.clock.setFixedTime(new Date(when));
+      const q = await c.newPage(); await q.goto(URL); await q.waitForSelector('.poster .q');
+      const out = `${await q.locator('.poster .q').innerText()} | ${await q.locator('.poster .by').innerText().catch(() => '')}`;
+      await c.close(); return out;
+    };
+    const special = await lineOn('2026-11-22T15:00:00');
+    check('22 Nov 2026 shows "Autobots, roll out."', /^Autobots, roll out\. \| OPTIMUS PRIME$/.test(special), special);
+    const nextDay = await lineOn('2026-11-23T07:00:00');
+    check('the next day is back to a normal line', !/Autobots/.test(nextDay), nextDay);
+    const otherSunday = await lineOn('2026-11-29T07:00:00');
+    check('other Sundays keep Kipchoge', /No human is limited/.test(otherSunday), otherSunday);
     check('no console errors', errors.length === 0, errors.join(' | '));
   } finally {
     await browser.close();

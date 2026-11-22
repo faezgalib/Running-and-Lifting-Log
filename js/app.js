@@ -7,14 +7,15 @@ import { classify, STARTER, GROUPS, defaultStep, effStep, ADDED_V24, ALIASES } f
 import { recommend, learnFactors, repsOf, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict, bestBefore, pbSets } from './recommend.js';
 import { convertHevy } from './hevy.js';
 import { lineChart, barChart, legend, LOC_COLORS, chartTap } from './charts.js';
-import { muscleVolume, muscleFigure, shadeLegend } from './muscles.js';
+import { muscleVolume, muscleFigure, shadeLegend, musclesOf, MUSCLE_NAMES } from './muscles.js';
+import { searchExercises } from './search.js';
 
 // ---------- state ----------
 const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], meta: {} };
 let draft = null;          // plan being built
 let ui = { paceView: 'outdoor', histFilter: 'all', progEx: null, progMetric: 'top', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.10.1';
+const APP_VERSION = 'v2.11';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
@@ -258,11 +259,8 @@ function greeting() {
   const h = new Date().getHours();
   return h < 11 ? 'Good morning' : h < 15 ? 'Good afternoon' : h < 19 ? 'Good evening' : 'Good night';
 }
-// One-day lines for special days (local date). Only that date shows it; the next day is back to normal.
-const SPECIAL_LINES = { '2026-11-22': 'Autobots, roll out. — Optimus Prime' };
 function dailyLine() {
   const d = new Date();
-  if (SPECIAL_LINES[isoDate(d)]) return SPECIAL_LINES[isoDate(d)];
   const doy = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
   if (d.getDay() === 0) return LINES[0]; // Sundays: Kipchoge
   return LINES[doy % LINES.length];
@@ -381,20 +379,26 @@ function pickerHtml() {
   doneSessions().forEach(s => s.entries.forEach(e => { counts[e.exId] = (counts[e.exId] || 0) + 1; if (!lastUsed[e.exId] || lastUsed[e.exId] < s.start) lastUsed[e.exId] = s.start; }));
   const selected = new Set(ui.picker.mode === 'plan' ? draft.exIds : []);
   const prog = ui.picker.mode === 'progress';
-  const list = S.exercises.filter(e => (prog ? e.kind !== 'mobility' && lastUsed[e.id] : !e.archived) && e.name.toLowerCase().includes(q));
+  const pool = S.exercises.filter(e => (prog ? e.kind !== 'mobility' && lastUsed[e.id] : !e.archived));
+  // Forgiving search: names, RDL/DB/BB, muscle names, small typos. Nothing by name → "Did you mean".
+  const mainMuscles = ex => Object.entries(musclesOf(ex) || {}).filter(([, v]) => v >= 0.5).map(([k]) => MUSCLE_NAMES[k]);
+  const { matches: list, suggestions } = searchExercises(pool, q, mainMuscles);
   // Recent: the 5 most recently used exercises (only when not searching). Everything else A–Z.
   const recent = q || prog ? [] : list.filter(e => lastUsed[e.id]).sort((a, b) => (lastUsed[a.id] < lastUsed[b.id] ? 1 : -1)).slice(0, 5);
   const recentIds = new Set(recent.map(e => e.id));
   const az = arr => [...arr].sort((a, b) => a.name.localeCompare(b.name));
   const byKind = k => az(list.filter(e => e.kind === k && !recentIds.has(e.id)));
-  const item = e => `<button class="pick ${selected.has(e.id) ? 'on' : ''}" data-act="pick" data-id="${e.id}"><span>${esc(e.name)}</span><span class="muted small">${prog ? `${counts[e.id] || 0} sessions` : lastUsed[e.id] ? fmtShort(lastUsed[e.id]) : e.group}</span></button>`;
-  const block = (title, arr, cls = '') => (arr.length ? `<h3 class="${cls}">${title}</h3>${arr.map(item).join('')}` : '');
+  const item = (e, why = '') => `<button class="pick ${selected.has(e.id) ? 'on' : ''}" data-act="pick" data-id="${e.id}"><span>${esc(e.name)}</span><span class="muted small">${why ? esc(why) : prog ? `${counts[e.id] || 0} sessions` : lastUsed[e.id] ? fmtShort(lastUsed[e.id]) : e.group}</span></button>`;
+  const dym = suggestions.length ? `<h3 class="dym">Did you mean</h3>${suggestions.map(x => item(x.ex, x.why)).join('')}` : '';
+  const block = (title, arr, cls = '') => (arr.length ? `<h3 class="${cls}">${title}</h3>${arr.map(e => item(e)).join('')}` : '');
   return `<div class="modal"><div class="sheet">
     <div class="sheethead"><input id="pickq" type="search" placeholder="Search exercises" value="${esc(ui.picker.q || '')}" autocomplete="off"><button class="btn small" data-act="closePicker">Done</button></div>
     <div class="sheetbody">
       ${recent.length ? `<div class="recent">${block('Recent', recent, 'recenth')}</div>` : ''}
       ${prog ? block('Exercises · A–Z', az(list)) : block(q ? 'Lifts' : 'Lifts · A–Z', byKind('lift'))}${prog ? '' : `${block('Core · A–Z', byKind('core'))}${block('Mobility · A–Z', byKind('mobility'))}`}
-      ${q && !prog && !list.some(e => e.name.toLowerCase() === q) ? `<button class="btn ghost wide" data-act="createEx">+ Create "${esc(ui.picker.q)}"</button>` : ''}
+      ${dym}
+      ${q && !list.length && !suggestions.length ? '<p class="muted small">No exercise found.</p>' : ''}
+      ${q && !prog && !list.some(e => e.name.toLowerCase() === q) ? `<button class="btn ghost wide" data-act="createEx">+ Create "${esc(ui.picker.q)}"</button>${suggestions.length ? '<p class="muted small center">Only for a new exercise. A typo makes a separate history.</p>' : ''}` : ''}
     </div></div></div>`;
 }
 

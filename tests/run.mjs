@@ -9,7 +9,9 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { sampleHevyCsv, OFFSHORE_PERIOD } from './fixtures.mjs';
 import { recommend, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict, pbSets } from '../js/recommend.js';
-import { classify } from '../js/seed.js';
+import { classify, STARTER, ADDED_V24 } from '../js/seed.js';
+import { searchExercises, typoDistance } from '../js/search.js';
+import { musclesOf, MUSCLE_NAMES } from '../js/muscles.js';
 import { parseDur, fmtDur } from '../js/util.js';
 import { muscleVolume } from '../js/muscles.js';
 import { niceAxis } from '../js/charts.js';
@@ -95,6 +97,25 @@ function unitTests() {
   check('bars start at 0 with round steps', niceAxis(0, 33).ticks.join() === '0,10,20,30,40', niceAxis(0, 33).ticks.join());
   check('every tick is a whole number', [[13.2, 17.8], [0.5, 1.1], [62.3, 71.9], [-14, 9], [40, 160]].every(([a, b]) => niceAxis(a, b).ticks.every(Number.isInteger)));
   check('pace axis steps of 15/30 s (6:57–7:43 → 6:45 … 7:45)', niceAxis(417, 463, [5, 10, 15, 30, 60, 120]).ticks.join() === '405,420,435,450,465', niceAxis(417, 463, [5, 10, 15, 30, 60, 120]).ticks.join());
+
+  section('Exercise search');
+  const lib = [...new Set([...STARTER, ...ADDED_V24])].map(n => ({ ...classify(n), id: n }));
+  const mm = x => Object.entries(musclesOf(x) || {}).filter(([, v]) => v >= 0.5).map(([k]) => MUSCLE_NAMES[k]);
+  const find = q => { const r = searchExercises(lib, q, mm); return { m: r.matches.map(x => x.name), s: r.suggestions.map(x => x.ex.name), why: r.suggestions.map(x => x.why) }; };
+  let f = find('bencg press');
+  check('typo "bencg press" → Did you mean Bench Press (Dumbbell)', f.m.length === 0 && f.s[0] === 'Bench Press (Dumbbell)', JSON.stringify(f));
+  f = find('hamstring curl');
+  check('"hamstring curl" → Lying and Seated Leg Curl (Hamstrings), not RDL', f.s.includes('Lying Leg Curl (Machine)') && f.s.includes('Seated Leg Curl (Machine)') && !f.s.some(n => /Romanian/.test(n)) && f.why.includes('Hamstrings'), JSON.stringify(f));
+  f = find('rdl');
+  check('"rdl" → Romanian Deadlift as a normal result', f.m.includes('Romanian Deadlift (Dumbbell)') && f.s.length === 0, JSON.stringify(f));
+  f = find('db bench');
+  check('"db" = dumbbell', f.m.includes('Bench Press (Dumbbell)'), JSON.stringify(f));
+  f = find('face pull');
+  check('plain name search unchanged ("face pull" → Face Pull only)', f.m.join() === 'Face Pull (Cable)' && f.s.length === 0, JSON.stringify(f));
+  f = find('deadlfit');
+  check('swapped letters count as one typo ("deadlfit")', typoDistance('deadlfit', 'deadlift') === 1 && f.s.some(n => /Deadlift/.test(n)), JSON.stringify(f));
+  f = find('rwo');
+  check('short words need an exact match (no wild guesses for "rwo")', f.s.length === 0, JSON.stringify(f));
 
   section('Duration typing');
   const cases = { '003000': '30:00', '3000': '30:00', '4530': '45:30', '13000': '1:30:00', '45': '45:00', '45:30': '45:30', '1:30:00': '1:30:00' };
@@ -260,7 +281,12 @@ async function browserTests() {
     check('every row has a value for both sides', right.length > 0 && right.length === left.length && !right.concat(left).some(Number.isNaN), `${right} / ${left}`);
     await back();
     await tab('Home'); await p.click('button[data-act=newPlan]');
-    await p.click('text=+ Add exercise'); await p.fill('#pickq', 'crunch');
+    await p.click('text=+ Add exercise'); await p.fill('#pickq', 'bencg press');
+    check('picker shows "Did you mean" for a typo', await p.locator('h3.dym').count() === 1 && /Bench Press \(Dumbbell\)/.test(await p.locator('h3.dym ~ .pick').first().innerText()) && /separate history/.test(await p.locator('.sheetbody').innerText()));
+    await p.fill('#pickq', 'romanian');
+    const pickLabels = await p.locator('.pick span:last-child').allInnerTexts();
+    check('picker labels are never a list number', pickLabels.length >= 2 && !pickLabels.some(t => /^\d+$/.test(t.trim())), pickLabels.join(','));
+    await p.fill('#pickq', 'crunch');
     await p.locator('.pick', { hasText: /^Crunch/ }).first().click();
     await p.click('button[data-act=closePicker]');
     await p.locator('.exname', { hasText: 'Crunch' }).first().click();
@@ -412,20 +438,6 @@ async function browserTests() {
     await p.click('button[data-act=checkUpdate]'); await p.waitForTimeout(300);
     check('Check for updates while offline says "No internet"', (await p.locator('.toast').allInnerTexts()).some(t => /No internet/.test(t)));
     await ctx.setOffline(false);
-    section('Special day line');
-    const lineOn = async when => {
-      const c = await browser.newContext({ viewport: { width: 400, height: 860 } });
-      await c.clock.setFixedTime(new Date(when));
-      const q = await c.newPage(); await q.goto(URL); await q.waitForSelector('.poster .q');
-      const out = `${await q.locator('.poster .q').innerText()} | ${await q.locator('.poster .by').innerText().catch(() => '')}`;
-      await c.close(); return out;
-    };
-    const special = await lineOn('2026-11-22T15:00:00');
-    check('22 Nov 2026 shows "Autobots, roll out."', /^Autobots, roll out\. \| OPTIMUS PRIME$/.test(special), special);
-    const nextDay = await lineOn('2026-11-23T07:00:00');
-    check('the next day is back to a normal line', !/Autobots/.test(nextDay), nextDay);
-    const otherSunday = await lineOn('2026-11-29T07:00:00');
-    check('other Sundays keep Kipchoge', /No human is limited/.test(otherSunday), otherSunday);
     check('no console errors', errors.length === 0, errors.join(' | '));
   } finally {
     await browser.close();

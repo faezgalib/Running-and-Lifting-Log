@@ -275,3 +275,20 @@ export function recommend(ex, ctx, { sessions, runs = [], learned = {} }) {
     base: { date: base.s.start, location: base.s.location, sets: base.entry.sets },
   };
 }
+
+// Positive line after saving a run (always positive, no old record shown):
+//  longest  → farther than every other run (treadmill and races count)      → "Your longest run yet."
+//  fastest  → fastest pace of all outdoor runs of 5 km or more              → "Your fastest pace yet."
+//  month    → farther than every other run this month (needs an earlier one) → "Your longest run this month."
+//  steps    → anything else                                                  → "Every step matters."
+export function runVerdict(run, runs) {
+  const others = runs.filter(r => r.id !== run.id && r.distKm > 0);
+  const max = list => Math.max(...list.map(r => r.distKm));
+  const outdoor = r => r.type !== 'Treadmill' && r.distKm >= 5 && r.durSec > 0;
+  if (others.length && run.distKm > max(others)) return { kind: 'longest', title: 'Your longest run yet.' };
+  const prevOut = others.filter(outdoor);
+  if (outdoor(run) && prevOut.length && run.durSec / run.distKm < Math.min(...prevOut.map(r => r.durSec / r.distKm))) return { kind: 'fastest', title: 'Your fastest pace yet.' };
+  const month = others.filter(r => r.date.slice(0, 7) === run.date.slice(0, 7));
+  if (month.length && run.distKm > max(month)) return { kind: 'month', title: 'Your longest run this month.' };
+  return { kind: 'steps', title: 'Every step matters.' };
+}

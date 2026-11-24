@@ -35,7 +35,7 @@ Each exercise has:
 1. **Check-in**: location, sleep.
 2. **Plan**: pick 5–7 exercises and order them. The app shows a recommended weight × reps × sets for each, with the reasons.
 3. **Log**: enter actual weight and reps per set (Left/Right for unilateral). Optional "reps left in tank" (0/1/2/3+) on the last set. Drop sets are added to a set (with Left/Right reps for unilateral exercises) and count for volume, not for recommendations.
-4. **Rest time**: time between "set done" taps of the same exercise. Switching to another exercise is not counted as rest.
+4. **Rest**: chosen per exercise, not measured — **1:00 / 1:30 / 2:00 / 3:00 / Custom** on each exercise card (Custom: "230" or "2:30" = 2:30, "3" = 3 min, "90" = 90 s). Every exercise starts at **2:00**; not changing it means 2:00. A changed rest is remembered for that exercise ("Same as last time"). Shown per exercise in the session ("Rest 2:00") and in the CSV export (`rest_sec`). Rest is not measured from the ✓ taps any more (that included the set itself and late taps); old measured rests are not shown.
 5. **Finish**: summary of target vs actual.
 
 The active session is saved continuously, so closing the app does not lose it.
@@ -56,6 +56,12 @@ For unilateral exercises, the weaker side counts. Targets are **per set**: set 1
 ## Running
 Manual entry (~30 s): date, type (Easy, Tempo, Interval, Long, Race, Treadmill), distance, duration, avg HR (optional), RPE 1–10, location, sleep, notes. Pace is calculated.
 Duration can be typed on the number pad without ":" — read like a stopwatch: `4530` = 45:30, `003000` = 0:30:00, `13000` = 1:30:00, `45` = 45 min. The field shows the parsed h:mm:ss after leaving it.
+After saving a **new** run, a blue summary shows one positive line, then distance, time and pace (no old record shown). Done → Home; Back goes Home, not to the form:
+- **Your longest run yet.** — farther than every other run (treadmill and races count).
+- **Your fastest pace yet.** — fastest pace of all outdoor runs of 5 km or more (treadmill never counts for pace).
+- **Your longest run this month.** — farther than every other run this month (treadmill counts; the first run of a month does not count).
+- **Every step matters.** — any other run.
+Editing an existing run returns to History as before.
 Races: name, date, distance, target time, linked result → countdown on home screen.
 
 ## After Finish

@@ -95,3 +95,6 @@ export const toCSV = rows => {
   const cell = v => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   return [cols.join(','), ...rows.map(r => cols.map(c => cell(r[c])).join(','))].join('\n');
 };
+
+// Typed rest between sets: "230" or "2:30" = 2:30, "3" = 3 min, "90" = 90 s (one or two digits: up to 10 = minutes, above = seconds).
+export const parseRest = v => { const t = String(v ?? '').trim(); if (/^\d{1,2}$/.test(t)) return +t <= 10 ? +t * 60 : +t; return parseDur(t); };

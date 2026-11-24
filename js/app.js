@@ -1,10 +1,10 @@
 import { db, STORES, requestPersistence } from './db.js';
 import {
-  uid, esc, isoDate, isoDateTime, parseLocal, fmtDate, fmtShort, fmtTime, fmtDur, parseDur, fmtPace,
+  uid, esc, isoDate, isoDateTime, parseLocal, fmtDate, fmtShort, fmtTime, fmtDur, parseDur, parseRest, fmtPace,
   num, fmtKg, e1rm, daysBetween, downloadFile, toCSV,
 } from './util.js';
 import { classify, STARTER, GROUPS, defaultStep, effStep, ADDED_V24, ALIASES } from './seed.js';
-import { recommend, learnFactors, repsOf, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict, bestBefore, pbSets } from './recommend.js';
+import { recommend, learnFactors, repsOf, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict, bestBefore, pbSets, runVerdict } from './recommend.js';
 import { convertHevy } from './hevy.js';
 import { lineChart, barChart, legend, LOC_COLORS, chartTap } from './charts.js';
 import { muscleVolume, muscleFigure, shadeLegend, musclesOf, MUSCLE_NAMES } from './muscles.js';
@@ -15,7 +15,7 @@ const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], me
 let draft = null;          // plan being built
 let ui = { paceView: 'outdoor', histFilter: 'all', progEx: null, progMetric: 'top', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.11';
+const APP_VERSION = 'v2.12';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
@@ -513,12 +513,17 @@ routes.workout = function workout(id) {
   ${pickerHtml()}${histHtml()}`;
 };
 
-// Rest = time since the previous finished set of the SAME exercise. Switching exercises is not rest.
-function restIn(e, si) {
-  const st = e.sets[si];
-  if (!st || !st.doneAt) return null;
-  for (let i = si - 1; i >= 0; i--) if (e.sets[i].doneAt) return st.doneAt > e.sets[i].doneAt ? (st.doneAt - e.sets[i].doneAt) / 1000 : null;
-  return null;
+// Rest is chosen per exercise (1:00 / 1:30 / 2:00 / 3:00 / Custom), 2:00 when not changed, and remembered per exercise.
+// It is not measured from the ✓ taps: that included the set itself and late taps, so it was not accurate.
+const DEFAULT_REST = 120;
+const REST_CHOICES = [60, 90, 120, 180];
+function restRow(e, ei, ex) {
+  const rest = e.rest ?? DEFAULT_REST;
+  const preset = REST_CHOICES.includes(rest);
+  const opts = [...REST_CHOICES.map(v => [v, fmtDur(v)]), ['custom', preset ? 'Custom' : fmtDur(rest)]];
+  const note = e.restFrom === 'last' && rest === ex.rest ? 'Same as last time' : e.rest == null || (e.restFrom !== 'last' && rest === DEFAULT_REST) ? `Default ${fmtDur(DEFAULT_REST)} · tap to change` : '';
+  const custom = ui.restCustom === ei ? `<input class="restin" inputmode="numeric" data-e="${ei}" data-f="rest" placeholder="230 = 2:30" value="${preset ? '' : fmtDur(rest)}">` : '';
+  return `<div class="restrow"><span class="lbl">Rest</span>${chips(`rest:${ei}`, opts, preset ? rest : 'custom').replace('class="chips"', 'class="chips rest"')}</div>${custom}${note ? `<div class="restnote">${note}</div>` : ''}`;
 }
 
 function setDefaults(s, e, si) {
@@ -564,18 +569,18 @@ function entryCard(s, e, ei) {
   const rows = e.sets.map((st, si) => {
     const d = setDefaults(s, e, si);
     const inputs = fields.map(f => `<input inputmode="decimal" data-e="${ei}" data-s="${si}" data-f="${f}" value="${st[f] ?? ''}" placeholder="${d[f] ?? ''}">`).join('');
-    const rest = restIn(e, si);
     const dropFields = sides(ex) ? [['w', 'kg'], ['rR', 'R reps'], ['rL', 'L reps']] : [['w', 'kg'], ['r', 'reps']];
     const drops = (st.drop || []).map((dp, di) => `<div class="setrow drop dcols${dropFields.length}"><span class="sn">↳</span>${dropFields.map(([f, ph]) => `<input inputmode="decimal" data-e="${ei}" data-s="${si}" data-d="${di}" data-f="${f}" value="${dp[f] ?? ''}" placeholder="${ph}">`).join('')}<button class="icon" data-act="rmDrop" data-e="${ei}" data-s="${si}" data-d="${di}">×</button></div>`).join('');
     return `<div class="setrow cols${fields.length}"><span class="sn">${si + 1}</span>${inputs}<button class="done ${st.doneAt ? 'on' : ''}" data-act="done" data-e="${ei}" data-s="${si}" aria-label="Set done">✓</button></div>
       ${pbs[si] ? `<div class="pbnote"><span class="badge">PB</span> ${pbs[si]}</div>` : ''}
       ${drops}
-      <div class="setmeta">${rest != null ? `<span class="muted small">rest ${fmtDur(rest)}</span>` : '<span></span>'}
+      <div class="setmeta"><span></span>
         <span>${ex.format === 'wr' ? `<button class="link small" data-act="addDrop" data-e="${ei}" data-s="${si}">+ drop</button>` : ''}<button class="link small" data-act="rmSet" data-e="${ei}" data-s="${si}">remove</button></span></div>`;
   }).join('');
   const lastDone = [...e.sets].reverse().find(x => x.doneAt);
   const rir = isLift(ex) && lastDone ? `<div class="rir"><span class="muted small">Reps left in tank (last set)</span>${chips(`rir:${ei}`, [[0, '0'], [1, '1'], [2, '2'], [3, '3+']], lastDone.rir)}</div>` : '';
   return `<div class="card ex">${head}${tline}
+    ${restRow(e, ei, ex)}
     <div class="sethead cols${fields.length}"><span>#</span>${cols.map(c => `<span>${c}</span>`).join('')}<span></span></div>
     ${rows}
     <div class="actions tight"><button class="btn small" data-act="addSet" data-e="${ei}">+ Set</button></div>
@@ -600,8 +605,8 @@ routes.session = function session(id) {
       const hit = ws.filter((x, i) => (x.w || 0) >= (t.weight || 0) && repsOf(x, ex) >= (per[Math.min(i, per.length - 1)] ?? t.reps)).length;
       verdict = `<div class="verdict ${hit >= t.sets ? 'good' : hit ? 'mid' : 'bad'}">Target ${fmtTarget(t, ex)} · ${hit}/${t.sets} sets hit</div>`;
     }
-    return `<div class="card ex"><div class="exhead">${exName(ex)}</div>${verdict}
-      <ol class="sets">${e.sets.map((x, i) => `<li>${fmtSet(x, ex)}${x.rir != null ? ` <span class="muted small">· ${x.rir === 3 ? '3+' : x.rir} left</span>` : ''}${x.rpe != null ? ` <span class="muted small">· RPE ${x.rpe}</span>` : ''}${restIn(e, i) != null ? ` <span class="muted small">· rest ${fmtDur(restIn(e, i))}</span>` : ''}</li>`).join('')}</ol>
+    return `<div class="card ex"><div class="exhead">${exName(ex)}</div>${e.rest != null ? `<div class="restline">Rest ${fmtDur(e.rest)}</div>` : ''}${verdict}
+      <ol class="sets">${e.sets.map((x, i) => `<li>${fmtSet(x, ex)}${x.rir != null ? ` <span class="muted small">· ${x.rir === 3 ? '3+' : x.rir} left</span>` : ''}${x.rpe != null ? ` <span class="muted small">· RPE ${x.rpe}</span>` : ''}</li>`).join('')}</ol>
       ${e.note ? `<p class="note">${esc(e.note)}</p>` : ''}</div>`;
   }).join('');
   return `
@@ -696,6 +701,21 @@ routes.run = function run(id) {
     <button class="btn primary wide" data-act="saveRun">Save</button>
     ${isNew ? '' : `<button class="btn danger" data-act="delRun" data-id="${r.id}">Delete</button>`}
   </div></div>`;
+};
+
+// ---------- RUN SAVED (summary right after logging a new run) ----------
+routes.rundone = function rundone(id) {
+  const r = S.runs.find(x => x.id === id);
+  if (!r) return routes['']();
+  const v = runVerdict(r, S.runs);
+  const extra = [r.avgHr ? `Avg HR ${r.avgHr}` : '', r.rpe ? `RPE ${r.rpe}` : '', r.sleep != null ? `sleep ${r.sleep >= 8 ? '8+' : r.sleep} h` : ''].filter(Boolean).join(' · ');
+  const name = r.type === 'Race' && r.raceName ? esc(r.raceName) : `${esc(r.type)} run`;
+  return `<div class="run-theme">
+  <header class="top"><button class="back" data-act="back" data-h="#/">‹</button><h1>Run</h1></header>
+  <div class="ack" data-kind="${v.kind}"><div class="big">${v.title}</div><div class="line">${fmtShort(r.date)} · ${name}${r.location ? ` · ${esc(r.location)}` : ''}</div></div>
+  <div class="stats"><div><b>${+r.distKm.toFixed(2)} km</b><span>distance</span></div><div><b>${fmtDur(r.durSec)}</b><span>time</span></div><div><b>${fmtPace(r.durSec, r.distKm).replace('/km', '')}</b><span>min/km</span></div></div>
+  ${extra ? `<section class="card"><p class="muted small" style="margin:0">${extra}</p></section>` : ''}
+  <div class="actions"><button class="btn primary wide" data-act="runDone">Done</button></div></div>`;
 };
 
 // ---------- PROGRESS ----------
@@ -1011,6 +1031,12 @@ const actions = {
       const e = s.entries[+name.split(':')[1]];
       const lastDone = [...e.sets].reverse().find(x => x.doneAt);
       if (lastDone) { lastDone.rir = lastDone.rir === +v ? undefined : +v; save('sessions', s); }
+    } else if (name.startsWith('rest:')) {
+      const ei = +name.split(':')[1];
+      const s = S.sessions.find(x => x.id === current.args[0]);
+      const e = s.entries[ei], ex = exById(e.exId);
+      if (v === 'custom') ui.restCustom = ui.restCustom === ei ? null : ei;
+      else { e.rest = +v; e.restFrom = 'chosen'; ex.rest = +v; ui.restCustom = null; save('exercises', ex); save('sessions', s); }
     } else if (name.startsWith('sloc:')) {
       const s = S.sessions.find(x => x.id === name.split(':')[1]);
       s.location = v; save('sessions', s); toast('Location updated');
@@ -1108,6 +1134,7 @@ const actions = {
     cleanSession(s);
     if (!s.entries.length) { if (confirm('No sets logged. Discard this session?')) { remove('sessions', s.id); goTab('#/'); } return; }
     s.status = 'done'; s.end = nowIso();
+    s.entries.forEach(e => { if (e.rest == null) e.rest = DEFAULT_REST; });
     save('sessions', s);
     ui.justFinished = s.id;
     goReplace(`#/session/${s.id}`);
@@ -1129,8 +1156,10 @@ const actions = {
     save('runs', r);
     ui.runDraft = null; ui.runEdit = null;
     toast('Run saved');
-    if (isNew) goReplace('#/history'); else goBack('#/history');
+    // A new run gets its own summary with a positive line; Back from there goes Home, not to the form.
+    if (isNew) goReplace(`#/rundone/${r.id}`); else goBack('#/history');
   },
+  runDone: () => goTab('#/'),
   delRun: el => { if (confirm('Delete this run?')) { remove('runs', el.dataset.id); goBack('#/history'); } },
   // Replaces pull-to-refresh: ask the browser to look for a new sw.js (~1 KB). A new version installs and the
   // existing 'controllerchange' listener reloads the app once (never while a session or run is being logged).
@@ -1177,7 +1206,7 @@ const actions = {
         if (!ex) return;
         e.sets.forEach((st, i) => {
           const base = { date: s.start.slice(0, 10), time: s.start.slice(11), location: s.location, sleep_h: s.sleep ?? '', work_h: s.location === 'Offshore' ? 12 : 0, exercise: ex.name, kind: ex.kind, group: ex.group, load: ex.load, order: e.order + 1, set: i + 1 };
-          rows.push({ ...base, drop: 0, weight_kg: st.w ?? '', reps: st.r ?? '', reps_right: st.rR ?? '', reps_left: st.rL ?? '', sec: st.sec ?? st.secR ?? '', sec_left: st.secL ?? '', metres: st.m ?? '', reps_in_tank: st.rir ?? '', rpe: st.rpe ?? '', rest_sec: restIn(e, i) != null ? Math.round(restIn(e, i)) : '', note: e.note || '' });
+          rows.push({ ...base, drop: 0, weight_kg: st.w ?? '', reps: st.r ?? '', reps_right: st.rR ?? '', reps_left: st.rL ?? '', sec: st.sec ?? st.secR ?? '', sec_left: st.secL ?? '', metres: st.m ?? '', reps_in_tank: st.rir ?? '', rpe: st.rpe ?? '', rest_sec: e.rest ?? '', note: e.note || '' });
           (st.drop || []).forEach(d => rows.push({ ...base, drop: 1, weight_kg: d.w ?? '', reps: d.r ?? '', reps_right: d.rR ?? '', reps_left: d.rL ?? '', sec: '', sec_left: '', metres: '', reps_in_tank: '', rpe: '', rest_sec: '', note: '' }));
         });
       });
@@ -1230,7 +1259,7 @@ function addEntry(s, exId) {
   const learned = learnFactors(S.sessions, S.exercises);
   const rec = recommend(ex, { location: s.location, sleep: s.sleep, start: s.start, position }, { sessions: S.sessions, runs: S.runs, learned });
   const n = rec.kind === 'rec' ? rec.sets : rec.kind === 'last' && rec.last ? rec.last.sets.length : 2;
-  s.entries.push({ exId, order: position, target: rec.kind === 'none' ? null : rec, sets: Array.from({ length: Math.max(1, n) }, () => ({ drop: [] })), note: '' });
+  s.entries.push({ exId, order: position, target: rec.kind === 'none' ? null : rec, sets: Array.from({ length: Math.max(1, n) }, () => ({ drop: [] })), note: '', rest: ex.rest ?? DEFAULT_REST, restFrom: ex.rest != null ? 'last' : 'default' });
 }
 
 // Drop empty sets (never ticked and no values) and empty exercises.
@@ -1301,6 +1330,12 @@ document.addEventListener('input', ev => {
     const s = S.sessions.find(x => x.id === current.args[0]);
     const e = s.entries[+el.dataset.e];
     if (el.dataset.f === 'note') { e.note = el.value; saveSoon('sessions', s); return; }
+    if (el.dataset.f === 'rest') {
+      const sec = parseRest(el.value);
+      if (sec > 600) return; // more than 10 minutes is a typo, not a rest
+      if (sec) { e.rest = sec; e.restFrom = 'chosen'; const ex = exById(e.exId); ex.rest = sec; save('exercises', ex); saveSoon('sessions', s); }
+      return;
+    }
     const st = e.sets[+el.dataset.s];
     const target = el.dataset.d != null ? st.drop[+el.dataset.d] : st;
     const v = num(el.value);

@@ -8,11 +8,11 @@ import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { sampleHevyCsv, OFFSHORE_PERIOD } from './fixtures.mjs';
-import { recommend, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict, pbSets } from '../js/recommend.js';
+import { recommend, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict, pbSets, runVerdict } from '../js/recommend.js';
 import { classify, STARTER, ADDED_V24 } from '../js/seed.js';
 import { searchExercises, typoDistance } from '../js/search.js';
 import { musclesOf, MUSCLE_NAMES } from '../js/muscles.js';
-import { parseDur, fmtDur } from '../js/util.js';
+import { parseDur, fmtDur, parseRest } from '../js/util.js';
 import { muscleVolume } from '../js/muscles.js';
 import { niceAxis } from '../js/charts.js';
 
@@ -116,6 +116,17 @@ function unitTests() {
   check('swapped letters count as one typo ("deadlfit")', typoDistance('deadlfit', 'deadlift') === 1 && f.s.some(n => /Deadlift/.test(n)), JSON.stringify(f));
   f = find('rwo');
   check('short words need an exact match (no wild guesses for "rwo")', f.s.length === 0, JSON.stringify(f));
+
+  section('Rest and runs');
+  check('typed rest: "230" = 2:30, "3" = 3 min, "90" = 90 s', parseRest('230') === 150 && parseRest('3') === 180 && parseRest('90') === 90 && parseRest('2:30') === 150);
+  const run = (id, date, km, min, type = 'Easy') => ({ id, date, distKm: km, durSec: min * 60, type });
+  const past = [run('a', '2026-10-05T07:00', 21.1, 150, 'Race'), run('b', '2026-11-02T07:00', 8, 60), run('c', '2026-11-10T07:00', 6, 42)];
+  check('farther than ever → "Your longest run yet."', runVerdict(run('n', '2026-11-20T07:00', 22, 170), past).title === 'Your longest run yet.');
+  check('fastest outdoor pace (≥5 km) → "Your fastest pace yet."', runVerdict(run('n', '2026-11-20T07:00', 5, 33), past).title === 'Your fastest pace yet.');
+  check('treadmill never sets the pace record', runVerdict(run('n', '2026-11-20T07:00', 5, 30, 'Treadmill'), past).kind !== 'fastest');
+  check('farther than this month → "Your longest run this month." (treadmill counts)', runVerdict(run('n', '2026-11-20T07:00', 9, 80, 'Treadmill'), past).title === 'Your longest run this month.');
+  check('first run of a month is not "longest this month"', runVerdict(run('n', '2026-12-01T07:00', 3, 30), past).title === 'Every step matters.');
+  check('otherwise → "Every step matters."', runVerdict(run('n', '2026-11-20T07:00', 4, 40), past).title === 'Every step matters.');
 
   section('Duration typing');
   const cases = { '003000': '30:00', '3000': '30:00', '4530': '45:30', '13000': '1:30:00', '45': '45:00', '45:30': '45:30', '1:30:00': '1:30:00' };
@@ -228,14 +239,21 @@ async function browserTests() {
     await bench.locator('button.done').nth(1).click();
     check('PB badge on the set during the session', /heaviest ever/.test(await bench.locator('.pbnote').innerText().catch(() => '')));
     check('Personal best toast', await p.locator('.toast', { hasText: 'Personal best · 99 kg' }).count() === 1, (await p.locator('.toast').allInnerTexts()).join(' | '));
-    await bench.locator('button.chip:has-text("1")').click();
+    await bench.locator('.rir button.chip', { hasText: /^1$/ }).click();
     await curl.locator('button.done').nth(0).click();
     await curl.locator('button[data-act=addDrop]').first().click();
     const dropInputs = curl.locator('.setrow.drop input');
     check('drop set on a unilateral exercise has kg, R and L', await dropInputs.count() === 3);
     await dropInputs.nth(0).fill('8'); await dropInputs.nth(1).fill('6'); await dropInputs.nth(2).fill('5');
-    const rests = await p.locator('.setmeta .muted').allInnerTexts();
-    check('rest only between sets of the same exercise', rests.length === 1, rests.join(','));
+    check('no measured rest under the sets any more', await p.locator('.setmeta .muted').count() === 0);
+    check('each exercise has Rest 2:00 chosen by default', await p.locator('.restrow').count() === 2 && (await bench.locator('.chips.rest .chip.on').innerText()) === '2:00' && /Default 2:00/.test(await bench.locator('.restnote').innerText()));
+    await curl.locator('.chips.rest .chip', { hasText: '3:00' }).click();
+    check('rest can be changed per exercise', (await curl.locator('.chips.rest .chip.on').innerText()) === '3:00' && (await bench.locator('.chips.rest .chip.on').innerText()) === '2:00');
+    await bench.locator('.chips.rest .chip', { hasText: 'Custom' }).click();
+    await bench.locator('input.restin').fill('230');
+    await bench.locator('.chips.rest .chip', { hasText: 'Custom' }).click();
+    check('custom rest "230" → 2:30', (await bench.locator('.chips.rest .chip.on').innerText()) === '2:30', await bench.locator('.chips.rest .chip.on').innerText());
+    await bench.locator('.chips.rest .chip', { hasText: '2:00' }).click();
     check('Back from a session goes Home with a Resume card', await back() === '#/' && await p.locator('.card.resume').count() === 1);
     await p.click('.card.resume'); await p.click('button:has-text("Finish")');
     await p.waitForSelector('.musclemap');
@@ -246,6 +264,8 @@ async function browserTests() {
     const ackFirst = await ackLooksRight();
     check('line after Finish has no box and is not cut off', ackFirst === 'ok', ackFirst);
     check('line sits above the muscle map', await p.evaluate(() => { const a = document.querySelector('.ack'), m = document.querySelector('.musclemap'); return !!a && !!m && (a.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING) > 0; }));
+    const restLines = await p.locator('.card.ex .restline').allInnerTexts();
+    check('session shows rest per exercise (2:00 and 3:00)', restLines.join('|') === 'Rest 2:00|Rest 3:00', restLines.join('|'));
     check('summary keeps the drop set (R/L)', (await p.locator('main').innerText()).includes('8×R6/L5'));
     check('Back after Finish goes Home (not to the finished session)', await back() === '#/');
     // A day with missed targets gets "Done. Every session counts." — it must look right too.
@@ -376,7 +396,10 @@ async function browserTests() {
     check('"3000" on the number pad → pace 7:30/km', (await p.locator('#pace').innerText()) === '7:30/km');
     check('Log a run uses running blue', await p.evaluate(() => getComputedStyle(document.querySelector('button[data-act=saveRun]')).backgroundColor) === 'rgb(110, 168, 254)');
     await p.click('button:has-text("Save")');
-    check('saved run → History, Back → Home', await where() === '#/history' && await back() === '#/');
+    const runLine = await p.locator('.ack .big').innerText().catch(() => '');
+    check('saved run → summary with a positive line', (await where()).startsWith('#/rundone/') && ['Your longest run yet.', 'Your fastest pace yet.', 'Your longest run this month.', 'Every step matters.'].includes(runLine), runLine);
+    check('run summary is blue and shows distance, time, pace', /4 km[\s\S]*30:00[\s\S]*7:30/.test(await p.locator('.stats').innerText()) && await p.evaluate(() => getComputedStyle(document.querySelector('[data-act=runDone]')).backgroundColor) === 'rgb(110, 168, 254)', await p.locator('.stats').innerText());
+    check('Back from the run summary → Home (not the form)', await back() === '#/');
     await tab('More'); await p.click('a[href="#/body"]');
     await p.fill('#bwKg', '72'); await p.click('button:has-text("+ Add weight")'); await p.waitForTimeout(200);
     const bwTicks = await yTicks('svg.chart');

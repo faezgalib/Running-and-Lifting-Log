@@ -9,7 +9,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { sampleHevyCsv, OFFSHORE_PERIOD } from './fixtures.mjs';
 import { recommend, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict, pbSets, runVerdict } from '../js/recommend.js';
-import { classify, STARTER, ADDED_V24 } from '../js/seed.js';
+import { classify, STARTER, ADDED_V24, ADDED_V213 } from '../js/seed.js';
 import { searchExercises, typoDistance } from '../js/search.js';
 import { musclesOf, MUSCLE_NAMES } from '../js/muscles.js';
 import { parseDur, fmtDur, parseRest } from '../js/util.js';
@@ -56,6 +56,30 @@ function unitTests() {
   check('home: low sleep → −1 rep', r.repsBySet.join() === '11,10', JSON.stringify(r.repsBySet));
   r = recommend(bench, ctx('Offshore', null, 4), { sessions: [sess(bench, [{ w: 16, r: 12 }, { w: 16, r: 10, rir: 1 }])] });
   check('later in the session than usual → −1 rep', r.repsBySet.join() === '11,10', JSON.stringify(r.repsBySet));
+
+  section('Gym weight steps (machines/cables 5 kg, Smith 10 kg)');
+  const cls = n => { const c = classify(n); return `${c.group}/${c.equipment}/${c.step}`; };
+  check('"Bench Press (Smith Machine)" → chest, smith, 10 kg', cls('Bench Press (Smith Machine)') === 'chest/smith/10', cls('Bench Press (Smith Machine)'));
+  check('a name with "Machine" is not read as back ("ma-chin-e")', cls('Pec Deck Machine') === 'chest/machine/5' && cls('Chin Up').startsWith('back'), cls('Pec Deck Machine'));
+  check('machines and cables: 5 kg; dumbbells stay 1.5 kg', cls('Chest Press (Machine)') === 'chest/machine/5' && cls('Seated Cable Row') === 'back/cable/5' && cls('Bench Press (Dumbbell)') === 'chest/dumbbell/1.5');
+  const rowC = { ...ex('Seated Cable Row'), id: 'rowc' };
+  r = recommend(rowC, ctx('Gym'), { sessions: [sess(rowC, [{ w: 35, r: 12 }, { w: 35, r: 12, rir: 2 }], 'Gym')] });
+  check('cable 35 kg, all 12 reps → 40 kg (not 37.5)', r.weight === 40, String(r.weight));
+  r = recommend(rowC, ctx('Gym'), { sessions: [sess(rowC, [{ w: 40, r: 10 }, { w: 40, r: 9, rir: 1 }], 'Gym')] });
+  check('after lifting 40 kg → next stays 40 kg', r.weight === 40, String(r.weight));
+  r = recommend(rowC, ctx('Gym'), { sessions: [sess(rowC, [{ w: 37.5, r: 12 }, { w: 37.5, r: 12, rir: 2 }], 'Gym')] });
+  check('odd old weight 37.5 → up to 40', r.weight === 40, String(r.weight));
+  r = recommend(rowC, ctx('Gym'), { sessions: [sess(rowC, [{ w: 37.5, r: 6 }, { w: 37.5, r: 5, rir: 0 }], 'Gym')] });
+  check('odd old weight 37.5, failure → down to 35', r.weight === 35, String(r.weight));
+  const smith = { ...ex('Bench Press (Smith Machine)'), id: 'smith' };
+  r = recommend(smith, ctx('Gym'), { sessions: [sess(smith, [{ w: 10, r: 12 }, { w: 10, r: 12, rir: 2 }], 'Gym')] });
+  check('Smith 10 kg plates, all 12 reps → 20 kg', r.weight === 20, String(r.weight));
+  r = recommend(rowC, ctx('Home', 4), { sessions: [sess(rowC, [{ w: 40, r: 5 }, { w: 40, r: 4, rir: 1 }], 'Home', 7)] });
+  check('big step + low sleep (reps far below range) → fewer reps, weight stays 40', r.weight === 40 && r.reasons.some(x => /Big weight step/.test(x)), `${r.weight} ${r.repsBySet}`);
+  r = recommend(bench, ctx('Offshore'), { sessions: [sess(bench, [{ w: 16, r: 12 }, { w: 16, r: 12, rir: 2 }])] });
+  check('dumbbell still +1.5 kg (16 → 17.5)', r.weight === 17.5, String(r.weight));
+  const libN = new Set([...STARTER, ...ADDED_V24]);
+  check('10 Smith machine exercises in the library, each with a muscle map', ADDED_V213.length === 10 && ADDED_V213.every(n => libN.has(n) && musclesOf({ name: n, kind: 'lift' })), ADDED_V213.filter(n => !musclesOf({ name: n, kind: 'lift' })).join(','));
 
   section('Progress: actual weight');
   const press = ex('Chest Press (Machine)');
@@ -383,7 +407,7 @@ async function browserTests() {
     await p.reload(); await p.waitForSelector('.hero');
     const lib = await p.evaluate(() => new Promise(res => { const r = indexedDB.open('lift-run-journey'); r.onsuccess = () => { r.result.transaction('exercises').objectStore('exercises').getAll().onsuccess = ev => res(ev.target.result); }; }));
     const rows = lib.filter(e => /row cable|seated cable row/i.test(e.name));
-    check('"row cable" becomes Seated Cable Row (one exercise, cable, 2.5 kg steps)', rows.length === 1 && rows[0].id === 'own-row' && rows[0].name === 'Seated Cable Row' && rows[0].equipment === 'cable' && rows[0].step === 2.5, JSON.stringify(rows.map(e => [e.id, e.name, e.equipment, e.step])));
+    check('"row cable" becomes Seated Cable Row (one exercise, cable, 5 kg steps)', rows.length === 1 && rows[0].id === 'own-row' && rows[0].name === 'Seated Cable Row' && rows[0].equipment === 'cable' && rows[0].step === 5, JSON.stringify(rows.map(e => [e.id, e.name, e.equipment, e.step])));
     await tab('History'); await p.locator('.list a.row[href="#/session/own-row-s"]').click();
     await p.click('button.chip:has-text("Back")');
     check('its logged sets now count as lats in the muscle map', /Lats/.test(await p.locator('.musclemap').textContent()) && await p.evaluate(() => [...document.querySelectorAll('.musclemap path')].some(x => !['#262b33', '#1c2027'].includes(x.getAttribute('fill')))));

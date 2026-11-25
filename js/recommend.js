@@ -199,20 +199,26 @@ export function recommend(ex, ctx, { sessions, runs = [], learned = {} }) {
 
   let targets, increased = false;
   const baseW = w;
+  // Big steps (machines/cables 5 kg, Smith 10 kg): weights land on what the gym has (multiples of the step).
+  // Up = next multiple above the last weight (37.5 → 40), down = the one below (40 → 35). Small steps (dumbbells) add/subtract as before.
+  const coarse = step >= 5;
+  const up = v => (coarse ? (Math.floor(v / step + 1e-9) + 1) * step : +(v + step).toFixed(2));
+  const down = v => (coarse ? (Math.ceil(v / step - 1e-9) - 1) * step : +(v - step).toFixed(2));
+  const diff = () => `${+Math.abs(w - baseW).toFixed(2)} kg`;
   const all = v => baseBySet.map(() => v);
-  if (drops >= 3 && !bw && w - step > 0) {
-    w = +(w - step).toFixed(2); targets = all(lo);
-    reasons.push(`Performance down 3 sessions in a row → drop ${step} kg and rebuild.`);
+  if (drops >= 3 && !bw && down(w) > 0) {
+    w = down(w); targets = all(lo);
+    reasons.push(`Performance down 3 sessions in a row → drop ${diff()} and rebuild.`);
   } else if (drops >= 2) {
     targets = [...baseBySet];
     reasons.push('Performance down 2 sessions in a row → hold, repeat last session.');
-  } else if (lastRir === 0 && minR < lo && !bw && w - step > 0) {
-    w = +(w - step).toFixed(2); targets = all(lo);
-    reasons.push(`Last set hit failure below ${lo} reps → drop ${step} kg.`);
+  } else if (lastRir === 0 && minR < lo && !bw && down(w) > 0) {
+    w = down(w); targets = all(lo);
+    reasons.push(`Last set hit failure below ${lo} reps → drop ${diff()}.`);
   } else if (reps.every(r => r >= hi) || (lastRir >= 3 && minR >= hi - 1)) {
     const why = reps.every(r => r >= hi) ? `All sets hit ${hi} reps` : `${minR} reps with ${rirTxt}`;
     if (bw) { const inc = lastRir >= 3 ? 2 : 1; targets = baseBySet.map(r => r + inc); reasons.push(`${why} → +${inc} rep${inc > 1 ? 's' : ''}.`); }
-    else { w = +(w + step).toFixed(2); targets = all(lo); increased = true; reasons.push(`${why} → +${step} kg, back to ${lo} reps.`); }
+    else { w = up(w); targets = all(lo); increased = true; reasons.push(`${why} → +${diff()}, back to ${lo} reps.`); }
   } else {
     // Reps in the tank on the last set decide the size of the step.
     const inc = lastRir === 0 ? 0 : lastRir >= 3 ? 2 : 1;
@@ -262,10 +268,13 @@ export function recommend(ex, ctx, { sessions, runs = [], learned = {} }) {
   }
 
   let finalBySet = targets.map(t => t + adj);
-  if (Math.min(...finalBySet) < lo - 2 && !bw && w - step > 0) {
-    w = +(w - step).toFixed(2);
-    finalBySet = [...targets];
-    reasons.push(`Too many reps lost → drop ${step} kg instead.`);
+  if (Math.min(...finalBySet) < lo - 2 && !bw && down(w) > 0) {
+    if (coarse) reasons.push(`Big weight step (${step} kg) → fewer reps today instead of less weight.`);
+    else {
+      w = down(w);
+      finalBySet = [...targets];
+      reasons.push(`Too many reps lost → drop ${diff()} instead.`);
+    }
   }
   finalBySet = finalBySet.map(r => Math.max(1, r));
   const finalReps = Math.min(...finalBySet);

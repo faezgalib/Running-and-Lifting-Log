@@ -3,7 +3,7 @@ import {
   uid, esc, isoDate, isoDateTime, parseLocal, fmtDate, fmtShort, fmtTime, fmtDur, parseDur, parseRest, fmtPace,
   num, fmtKg, e1rm, daysBetween, downloadFile, toCSV,
 } from './util.js';
-import { classify, STARTER, GROUPS, defaultStep, effStep, ADDED_V24, ALIASES } from './seed.js';
+import { classify, STARTER, GROUPS, defaultStep, effStep, ADDED_V24, ADDED_V213, ALIASES } from './seed.js';
 import { recommend, learnFactors, repsOf, workingSets, entryBest, heaviestSet, setsLine, sessionVerdict, bestBefore, pbSets, runVerdict } from './recommend.js';
 import { convertHevy } from './hevy.js';
 import { lineChart, barChart, legend, LOC_COLORS, chartTap } from './charts.js';
@@ -15,7 +15,7 @@ const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], me
 let draft = null;          // plan being built
 let ui = { paceView: 'outdoor', histFilter: 'all', progEx: null, progMetric: 'top', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.12';
+const APP_VERSION = 'v2.13';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
@@ -64,8 +64,18 @@ async function upkeepExercises() {
     Object.assign(typed, { ...std, id: typed.id, archived: !!typed.archived, repMin: typed.repMin || std.repMin, repMax: typed.repMax || std.repMax });
     await db.put('exercises', typed);
   }
-  const missing = ADDED_V24.filter(n => !byName(n)).map(classify);
+  const missing = [...ADDED_V24, ...ADDED_V213].filter(n => !byName(n)).map(classify);
   if (missing.length) { S.exercises.push(...missing); await db.putMany('exercises', missing); }
+  // v2.13: gym machines and cables go up 5 kg, Smith 10 kg. Fix the old 2.5 kg step and names the old rules misread
+  // ("Machine" contains "chin" → back; "(Smith Machine)" → dumbbell). Id, sets and rep range stay.
+  for (const e of S.exercises) {
+    if (e.kind !== 'lift' || e.format !== 'wr') continue;
+    const std = classify(e.name), before = JSON.stringify([e.equipment, e.step, e.group]);
+    if (['machine', 'cable', 'smith'].includes(std.equipment) && e.equipment === 'dumbbell') e.equipment = std.equipment;
+    if (['machine', 'cable', 'smith'].includes(e.equipment) && (e.step === 2.5 || e.step === 1.5 || e.step == null)) { e.step = defaultStep(e.equipment); e.load = 'single'; }
+    if (e.group === 'back' && /\bmachine\b/i.test(e.name) && !/row|pulldown|pull up|\bchin\b|rear delt/i.test(e.name)) e.group = std.group;
+    if (JSON.stringify([e.equipment, e.step, e.group]) !== before) await db.put('exercises', e);
+  }
 }
 
 const save = (store, obj) => {
@@ -907,9 +917,10 @@ routes.exercise = function exercise(id) {
     <label>Log as</label>${opt('format', [['wr', 'Weight + reps'], ['r', 'Reps only'], ['hold', 'Hold (sec)'], ['dist', 'Distance (m)']], e.format)}
     <label>Left / right separately</label>${opt('unilateral', [[true, 'Yes'], [false, 'No']], !!(e.unilateral || e.perSide))}
     ${e.format === 'wr' ? `
-      <label>Equipment</label>${opt('equipment', ['dumbbell', 'barbell', 'machine', 'cable', 'bodyweight'], e.equipment)}
+      <label>Equipment</label>${opt('equipment', [['dumbbell', 'dumbbell'], ['barbell', 'barbell'], ['machine', 'machine'], ['cable', 'cable'], ['smith', 'smith machine'], ['bodyweight', 'bodyweight']], e.equipment)}
+      ${['machine', 'cable', 'smith'].includes(e.equipment) ? `<p class="muted small">Weight step: ${e.step} kg (${e.equipment === 'smith' ? '5 kg plate each side' : 'gym stacks go up 5 kg'}).</p>` : `
       <label>Weight entered as</label>${opt('load', [['single', 'Per dumbbell / stack'], ['total', 'Total of 2 dumbbells']], e.load)}
-      <label>Weight step (kg)</label>${opt('step', [[1.5, '1.5'], [2, '2'], [2.5, '2.5'], [3, '3']], e.step)}
+      <label>Weight step (kg)</label>${opt('step', [[1.5, '1.5'], [2, '2'], [2.5, '2.5'], [3, '3']], e.step)}`}
       ${e.load === 'total' ? `<p class="muted small">Recommendation step = ${effStep(e)} kg total (${e.step} kg per dumbbell).</p>` : ''}` : ''}
     <label>Muscle group</label>${opt('group', GROUPS, e.group)}
     ${e.kind === 'lift' ? `<div class="grid2"><div><label>Rep range min</label><input inputmode="numeric" data-exf="repMin" value="${e.repMin}"></div><div><label>Rep range max</label><input inputmode="numeric" data-exf="repMax" value="${e.repMax}"></div></div>` : ''}

@@ -64,6 +64,7 @@ const GROUP_OVERRIDE = {
   'Hip Thrust (Dumbbell)': 'legs', 'Hip Abduction (Machine)': 'legs', 'Hip Adduction (Machine)': 'legs',
   'Cable Glute Kickback': 'legs', 'Tibialis Raise': 'legs', 'Chest Fly (Cable)': 'chest',
   'Overhead Triceps Extension (Cable)': 'arms',
+  'Hip Thrust (Smith Machine)': 'legs', 'Shrug (Smith Machine)': 'back', 'Calf Raise (Smith Machine)': 'legs',
 };
 
 // Common exercises added in v2.4 (cable, machine, dumbbell, bodyweight), on top of the starter list.
@@ -77,12 +78,20 @@ export const ADDED_V24 = [
   'Chin Up', 'Bench Dip', 'Hanging Leg Raise', 'Dead Bug', 'Bird Dog', 'Mountain Climber', 'Tibialis Raise',
 ];
 
+// Smith machine exercises added in v2.13 (weight = plates only, 5 kg per side → 10 kg steps).
+export const ADDED_V213 = [
+  'Bench Press (Smith Machine)', 'Incline Bench Press (Smith Machine)', 'Shoulder Press (Smith Machine)',
+  'Squat (Smith Machine)', 'Split Squat (Smith Machine)', 'Romanian Deadlift (Smith Machine)', 'Hip Thrust (Smith Machine)',
+  'Calf Raise (Smith Machine)', 'Bent Over Row (Smith Machine)', 'Shrug (Smith Machine)',
+];
+
 // Names the owner typed for an exercise that now exists under its standard name.
 export const ALIASES = { 'row cable': 'Seated Cable Row' };
 
 const GROUP_RULES = [
   [/calf|squat|lunge|leg press|leg curl|deadlift|step up|split|hamstring|leg extension/i, 'legs'],
-  [/row|pulldown|pull up|chin|rear delt/i, 'back'],
+  [/row|pulldown|pull up|\bchin\b|rear delt/i, 'back'], // \bchin\b: "machine" contains "chin"
+  [/hip thrust|glute/i, 'legs'],
   [/bench|chest|pec|push up/i, 'chest'],
   [/shoulder|lateral raise|front raise|overhead|plate front/i, 'shoulders'],
   [/curl|tricep|pushdown|wrist|extension/i, 'arms'],
@@ -92,14 +101,16 @@ const GROUP_RULES = [
 export const GROUPS = ['legs', 'chest', 'back', 'shoulders', 'arms', 'core', 'full body', 'mobility'];
 
 export function equipmentOf(name) {
-  if (/\(machine\)/i.test(name)) return 'machine';
+  if (/smith/i.test(name)) return 'smith';
+  if (/\bmachine\b/i.test(name)) return 'machine';
   if (/cable|pushdown|pulldown/i.test(name)) return 'cable';
   if (/\(barbell\)/i.test(name)) return 'barbell';
   if (BODYWEIGHT_LIFTS.includes(name) || /\(bodyweight\)/i.test(name) || /pull up|push up|chin up/i.test(name)) return 'bodyweight';
   return 'dumbbell';
 }
 
-export const defaultStep = equip => (equip === 'machine' || equip === 'cable' ? 2.5 : equip === 'bodyweight' ? 0 : 1.5);
+// Gym weight steps: machines and cables go up 5 kg; Smith machine 10 kg (smallest plate 5 kg, both sides).
+export const defaultStep = equip => (equip === 'smith' ? 10 : equip === 'machine' || equip === 'cable' ? 5 : equip === 'bodyweight' ? 0 : 1.5);
 
 export function classify(name) {
   const base = {
@@ -135,7 +146,7 @@ export const STARTER = [...new Set([
   'Bench Press (Dumbbell)', 'Dumbbell Row', 'Romanian Deadlift (Dumbbell)', 'Bulgarian Split Squat (Dumbbell)',
   'Lying Leg Curl (Machine)', 'Squat (Machine)', 'Chest Fly (Machine)', 'Leg Press (Machine)',
   'Seated Shoulder Press (Machine)', 'Chest Press (Machine)', 'Lateral Raise (Cable)',
-  ...ADDED_V24,
+  ...ADDED_V24, ...ADDED_V213,
 ])];
 
 // Effective weight step for a recommendation (doubles when load is the total of 2 dumbbells).

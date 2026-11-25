@@ -21,9 +21,10 @@ Performance is compared against sessions in the same location first.
 ## Exercises
 Each exercise has:
 - **Kind**: lift, core, mobility
-- **Equipment**: dumbbell, machine, cable, barbell, bodyweight → default weight step
+- **Equipment**: dumbbell, machine, cable, smith machine, barbell, bodyweight → default weight step
   - Dumbbell / barbell: +1.5 kg (options 1.5 / 2 / 3)
-  - Machine / cable: +2.5 kg
+  - Machine / cable: **5 kg** (gym stacks at Ashaba and offshore go up 5 kg). Set automatically, no option.
+  - Smith machine: **10 kg** — smallest plate is 5 kg, one on each side. Log the plates only (not the bar), the same way every time.
 - **Load entry**: per dumbbell, or total of 2 dumbbells (step doubles)
 - **Unilateral**: separate Left / Right reps per set (same weight)
 - **Muscle group**: legs, chest, back, shoulders, arms, core, full body
@@ -45,13 +46,14 @@ Baseline = most recent session of that exercise in the same location (else any l
 For unilateral exercises, the weaker side counts. Targets are **per set**: set 1 follows set 1 of the last session, set 2 follows set 2, and so on.
 
 1. **Double progression**: all working sets ≥ top of rep range → add one weight step and reset to the bottom of the range.
+   With big steps (machines/cables 5 kg, Smith 10 kg) every suggested weight is one the gym has: up = next multiple of the step above the last weight (35 → 40, 37.5 → 40), down = the multiple below (40 → 35), hold = the weight actually lifted last time.
 2. **Reps in reserve (last set)**: 0 → repeat, no increase · 1–2 → +1 rep · 3+ → +2 reps, or add weight if already within 1 rep of the top. Missing a target simply becomes the new baseline.
    Last set at 0 reps in tank and below range → drop one weight step.
 3. **Downtrend**: estimated 1RM down two sessions in a row (same location) → hold. Down three in a row → drop one step.
 4. **Context**: sleep ≤5 h → −1 rep (Home/Gym only); Offshore (12 h shift) when the baseline session was not Offshore → −1 rep. Once there is enough history (≥6 sessions in each condition), the app replaces these fixed rules with your own measured drop in performance. Tired days block a weight increase unless the last session ended with 3+ reps in reserve.
 5. **Order**: the exercise is planned 2+ positions later than usual → −1 rep.
 6. **Running load**: a long run (≥15 km, or type Long/Race) in the last 36 h → −1 rep for leg exercises.
-7. If adjustments push reps more than 2 below the range → drop one weight step instead.
+7. If adjustments push reps more than 2 below the range → drop one weight step instead. Not for big steps (5 kg or more): there the weight stays and only the target reps go down; the weight drops only after failure (0 reps left) below the range or 3 sessions down in a row.
 
 ## Running
 Manual entry (~30 s): date, type (Easy, Tempo, Interval, Long, Race, Treadmill), distance, duration, avg HR (optional), RPE 1–10, location, sleep, notes. Pace is calculated.
@@ -91,7 +93,7 @@ Two tabs; **Records** opens first.
 When the app starts, Android shows its own splash: sometimes the Chrome logo first, then the app icon on the dark background, without text. For a web app on Android 12+ this screen can only hold the icon and background colour, so it cannot be changed from the app. A custom splash (logo + LIFT RUN JOURNEY, no Chrome logo) comes with the native app (ROADMAP phase 2). Home itself has no animation, so it appears instantly.
 
 ## Exercise library
-Starter list plus common cable, machine, dumbbell and bodyweight exercises (v2.4, e.g. Seated Cable Row, Face Pull, Leg Extension, Arnold Press, Hip Thrust, Chin Up, Tibialis Raise), each with a muscle-map entry. An exercise the owner typed under a known alias is renamed to the standard name on start, keeping its sets ("row cable" → Seated Cable Row).
+Starter list plus common cable, machine, dumbbell and bodyweight exercises, and 10 Smith machine exercises (v2.13: Bench Press, Incline Bench Press, Shoulder Press, Squat, Split Squat, Romanian Deadlift, Hip Thrust, Calf Raise, Bent Over Row, Shrug) (v2.4, e.g. Seated Cable Row, Face Pull, Leg Extension, Arnold Press, Hip Thrust, Chin Up, Tibialis Raise), each with a muscle-map entry. An exercise the owner typed under a known alias is renamed to the standard name on start, keeping its sets ("row cable" → Seated Cable Row).
 
 ## Exercise picker
 **Recent** (5 most recently used) on top, clearly labelled. Everything else A–Z, grouped Lifts / Core / Mobility. Searching shows A–Z only.

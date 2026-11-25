@@ -20,6 +20,10 @@ const RDL = { hams: 1, glutes: 0.5, lowback: 0.5, forearms: 0.25 };
 
 export const MUSCLE_MAP = {
   'Bench Press (Dumbbell)': PRESS, 'Incline Bench Press (Dumbbell)': { chest: 1, fdelt: 0.5, triceps: 0.5 },
+  'Bench Press (Smith Machine)': PRESS, 'Incline Bench Press (Smith Machine)': { chest: 1, fdelt: 0.5, triceps: 0.5 },
+  'Shoulder Press (Smith Machine)': OHP, 'Squat (Smith Machine)': { quads: 1, glutes: 0.5, adductors: 0.25 },
+  'Split Squat (Smith Machine)': LUNGE, 'Romanian Deadlift (Smith Machine)': RDL, 'Hip Thrust (Smith Machine)': { glutes: 1, hams: 0.5 },
+  'Calf Raise (Smith Machine)': { calves: 1 }, 'Bent Over Row (Smith Machine)': ROW, 'Shrug (Smith Machine)': { traps: 1, forearms: 0.25 },
   'Chest Press (Machine)': PRESS, 'Push Up': { ...PRESS, abs: 0.25 },
   'Chest Fly (Dumbbell)': FLY, 'Chest Fly (Machine)': FLY,
   'Shoulder Press (Dumbbell)': OHP, 'Seated Shoulder Press (Machine)': OHP, 'Overhead Press (Dumbbell)': OHP,

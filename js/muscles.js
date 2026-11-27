@@ -84,8 +84,16 @@ const GROUP_FALLBACK = {
   shoulders: { fdelt: 0.5, sdelt: 0.5 }, arms: { biceps: 0.5, triceps: 0.5 }, core: { abs: 1 },
 };
 
+// Mobility moves that work a muscle count like any set; running drills and stretches are not on the map.
+const MOBILITY_MAP = {
+  'single leg glute bridge': { glutes: 1, hams: 0.5 }, 'glute bridge': { glutes: 1, hams: 0.5 },
+  'clamshell': { glutes: 1 }, 'fire hydrants': { glutes: 1 }, 'lateral band walks': { glutes: 1 },
+  'wall sit': { quads: 1, glutes: 0.25 }, 'plank': { abs: 1, obliques: 0.5 }, 'side plank': { obliques: 1, abs: 0.5 },
+  'copenhagen plank': { adductors: 1, obliques: 0.5 }, 'bird dog': { lowback: 0.5, glutes: 0.5 }, 'knee raise with bend': { abs: 0.5 },
+};
 export function musclesOf(ex) {
-  if (!ex || ex.kind === 'mobility') return null;
+  if (!ex) return null;
+  if (ex.kind === 'mobility') return MOBILITY_MAP[ex.name.trim().toLowerCase()] || null;
   return MAP_LC[ex.name.trim().toLowerCase()] || GROUP_FALLBACK[ex.group] || null;
 }
 

@@ -281,3 +281,20 @@ table.rec td.kg small { display: block; font-weight: 400; font-size: 11.5px; col
 .restin { max-width: 140px; padding: 6px 9px; font-size: 16px; margin: 4px 0; }
 .restnote { font-size: 12px; color: var(--muted); margin: 2px 0 8px; }
 .restline { font-size: 12.5px; color: var(--muted); margin: -4px 0 6px; }
+/* Run saved: distance as the hero, the logo's run line, this week by day */
+.runhero { text-align: center; padding: 10px 0 2px; }
+.runhero .runline { width: 120px; height: 20px; display: block; margin: 6px auto 0; }
+.runhero .km { font-size: 64px; font-weight: 250; line-height: 1; color: var(--run); letter-spacing: -.02em; margin-top: 8px; }
+.runhero .km span { font-size: 20px; font-weight: 500; margin-left: 6px; color: var(--muted); }
+.runhero .ack { padding-top: 10px; }
+.stats.two { grid-template-columns: repeat(2, 1fr); }
+.faster { text-align: center; font-size: 13px; color: var(--run); margin: 2px 0 6px; }
+.weekrun .wkhead { display: flex; align-items: baseline; gap: 6px; }
+.weekrun .wkhead b { font-size: 20px; }
+.weekrun .wkhead span { font-size: 12.5px; color: var(--muted); }
+.weekrun .wkhead .mon { margin-left: auto; }
+.daybars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; height: 64px; margin-top: 10px; }
+.daybars .db { display: grid; justify-items: center; gap: 4px; align-self: end; }
+.daybars .db i { width: 100%; max-width: 22px; border-radius: 4px; background: color-mix(in srgb, var(--run) 35%, transparent); display: block; }
+.daybars .db.on i { background: var(--run); }
+.daybars .db span { font-size: 11px; color: var(--muted); }

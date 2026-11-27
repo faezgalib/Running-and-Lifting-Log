@@ -58,7 +58,7 @@ For unilateral exercises, the weaker side counts. Targets are **per set**: set 1
 ## Running
 Manual entry (~30 s): date, type (Easy, Tempo, Interval, Long, Race, Treadmill), distance, duration, avg HR (optional), RPE 1–10, location, sleep, notes. Pace is calculated.
 Duration can be typed on the number pad without ":" — read like a stopwatch: `4530` = 45:30, `003000` = 0:30:00, `13000` = 1:30:00, `45` = 45 min. The field shows the parsed h:mm:ss after leaving it.
-After saving a **new** run, a blue summary shows one positive line, then distance, time and pace (no old record shown). Done → Home; Back goes Home, not to the form:
+After saving a **new** run, a blue summary shows the distance as the big number (with the logo's run line), one positive line, time and pace; "N s/km faster than your last N <type> runs" only when faster; this week's km by day (today highlighted) with the month's total; the next race countdown if any; HR/RPE/sleep small at the bottom (no old record shown). Done → Home; Back goes Home, not to the form:
 - **Your longest run yet.** — farther than every other run (treadmill and races count).
 - **Your fastest pace yet.** — fastest pace of all outdoor runs of 5 km or more (treadmill never counts for pace).
 - **Your longest run this month.** — farther than every other run this month (treadmill counts; the first run of a month does not count).
@@ -106,7 +106,8 @@ Search is forgiving:
 ## Muscle map
 Labelled body figure (front/back toggle), one green scale with clearly separated steps. Labels show muscle names only (no numbers); the legend below explains the shades in sets.
 - Shown after finishing a session ("Muscles worked") and weekly in Progress (this week / last week).
-- Counted in **working sets**. Primary muscle = 1 set, major helper = ½, minor helper = ¼. Mobility is not counted; core/abs is.
+- Counted in **working sets**. Primary muscle = 1 set, major helper = ½, minor helper = ¼. Core/abs is counted.
+- Mobility moves that work a muscle count fully, like any set (high reps close to failure are a real stimulus): Glute Bridge / Single Leg Glute Bridge (glutes 1, hamstrings ½), Clamshell, Fire Hydrants, Lateral Band Walks (glutes 1), Wall Sit (quads 1, glutes ¼), Plank (abs 1, obliques ½), Side Plank (obliques 1, abs ½), Copenhagen Plank (adductors 1, obliques ½), Bird Dog (lower back ½, glutes ½), Knee Raise with Bend (abs ½). Holds count a set when seconds were logged. Running drills (High Knees, A/B Skip, Toe Tap) and stretches are not counted.
 - The exercise → muscle table lives in `js/muscles.js` (`MUSCLE_MAP`). Unknown exercises fall back to their muscle group.
 
 ## Progress tab

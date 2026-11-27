@@ -162,6 +162,12 @@ function unitTests() {
   const vol = muscleVolume([{ entries: [{ exId: bench.id, sets: [{ w: 16, r: 10 }, { w: 16, r: 9 }] }, { exId: cc.id, sets: [{ w: 12, rR: 9, rL: 8 }] }] }], id => byId[id], (e, x) => workingSets(e, x).length);
   check('bench 2 sets → chest 2, triceps 1, front delts 1', vol.chest === 2 && vol.triceps === 1 && vol.fdelt === 1, JSON.stringify(vol));
   check('curl 1 set → biceps 1, forearms ¼', vol.biceps === 1 && vol.forearms === 0.25, JSON.stringify(vol));
+  const mob = n => ({ ...classify(n), id: n });
+  check('glute bridge and clamshell count fully for glutes', JSON.stringify(musclesOf(mob('Single Leg Glute Bridge'))) === JSON.stringify({ glutes: 1, hams: 0.5 }) && musclesOf(mob('Clamshell')).glutes === 1);
+  check('plank counts for abs, Copenhagen plank for adductors', musclesOf(mob('Plank')).abs === 1 && musclesOf(mob('Copenhagen Plank')).adductors === 1);
+  check('running drills and stretches are not on the map', ['High Knees', 'A Skip', 'Toe Tap', 'Hip Flexor Stretch', 'Stretching'].every(n => musclesOf(mob(n)) === null));
+  const gb = mob('Single Leg Glute Bridge'), mobVol = muscleVolume([{ entries: [{ exId: gb.id, sets: [{ rR: 30, rL: 30 }, { rR: 30, rL: 30 }] }] }], () => gb, (e, x) => workingSets(e, x).length);
+  check('2 sets of 30 single leg glute bridges → glutes 2 sets, hamstrings 1', mobVol.glutes === 2 && mobVol.hams === 1, JSON.stringify(mobVol));
 }
 
 // ---------- 2. app in a real browser ----------
@@ -422,7 +428,8 @@ async function browserTests() {
     await p.click('button:has-text("Save")');
     const runLine = await p.locator('.ack .big').innerText().catch(() => '');
     check('saved run → summary with a positive line', (await where()).startsWith('#/rundone/') && ['Your longest run yet.', 'Your fastest pace yet.', 'Your longest run this month.', 'Every step matters.'].includes(runLine), runLine);
-    check('run summary is blue and shows distance, time, pace', /4 km[\s\S]*30:00[\s\S]*7:30/.test(await p.locator('.stats').innerText()) && await p.evaluate(() => getComputedStyle(document.querySelector('[data-act=runDone]')).backgroundColor) === 'rgb(110, 168, 254)', await p.locator('.stats').innerText());
+    check('run summary: distance as the big number, then time and pace, in blue', /^4\s*km$/.test((await p.locator('.runhero .km').innerText()).trim()) && /30:00[\s\S]*7:30/.test(await p.locator('.stats').innerText()) && await p.evaluate(() => getComputedStyle(document.querySelector('[data-act=runDone]')).backgroundColor) === 'rgb(110, 168, 254)', await p.locator('.runhero .km').innerText());
+    check('run summary shows this week by day and the month', await p.locator('.daybars .db').count() === 7 && /this week/.test(await p.locator('.weekrun').innerText()) && /\d+(\.\d)? km/.test(await p.locator('.weekrun .mon').innerText()));
     check('Back from the run summary → Home (not the form)', await back() === '#/');
     await tab('More'); await p.click('a[href="#/body"]');
     await p.fill('#bwKg', '72'); await p.click('button:has-text("+ Add weight")'); await p.waitForTimeout(200);

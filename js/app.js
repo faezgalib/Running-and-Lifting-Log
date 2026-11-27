@@ -15,7 +15,7 @@ const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], me
 let draft = null;          // plan being built
 let ui = { paceView: 'outdoor', histFilter: 'all', progEx: null, progMetric: 'top', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.13';
+const APP_VERSION = 'v2.14';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
@@ -661,7 +661,9 @@ function livePbs(s, e, ex) {
 }
 
 // ---------- muscle map card ----------
-const countSets = (e, ex) => workingSets(e, ex).length;
+// A set counts when it was done: reps, a hold (seconds) or a distance.
+const countSets = (e, ex) => (ex.format === 'hold' ? (e.sets || []).filter(x => (x.sec || x.secR || x.secL) > 0).length
+  : ex.format === 'dist' ? (e.sets || []).filter(x => x.m > 0).length : workingSets(e, ex).length);
 function musclesCard(sessions, title, thresholds, unit, extra = '') {
   const vol = muscleVolume(sessions, exById, countSets);
   const total = Object.values(vol).reduce((a, b) => a + b, 0);
@@ -720,11 +722,32 @@ routes.rundone = function rundone(id) {
   const v = runVerdict(r, S.runs);
   const extra = [r.avgHr ? `Avg HR ${r.avgHr}` : '', r.rpe ? `RPE ${r.rpe}` : '', r.sleep != null ? `sleep ${r.sleep >= 8 ? '8+' : r.sleep} h` : ''].filter(Boolean).join(' · ');
   const name = r.type === 'Race' && r.raceName ? esc(r.raceName) : `${esc(r.type)} run`;
+  // This week (Mon–Sun) by day, and this month.
+  const wk = weekKey(r.date), d0 = parseLocal(wk);
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(d0); d.setDate(d.getDate() + i); return isoDate(d); });
+  const kmOn = day => S.runs.filter(x => x.date.slice(0, 10) === day).reduce((a, x) => a + (x.distKm || 0), 0);
+  const perDay = days.map(kmOn), wkKm = perDay.reduce((a, b) => a + b, 0);
+  const month = r.date.slice(0, 7), monKm = S.runs.filter(x => x.date.slice(0, 7) === month).reduce((a, x) => a + (x.distKm || 0), 0);
+  const monName = parseLocal(r.date).toLocaleString('en', { month: 'long' });
+  const maxD = Math.max(...perDay, 1), today = r.date.slice(0, 10);
+  const bars = days.map((d, i) => `<div class="db ${d === today ? 'on' : ''}"><i style="height:${Math.max(3, perDay[i] / maxD * 44)}px"></i><span>${'MTWTFSS'[i]}</span></div>`).join('');
+  // Pace vs the last 5 runs of the same type (shown only when faster: positive only).
+  const prev = S.runs.filter(x => x.id !== r.id && x.type === r.type && x.distKm > 0 && x.durSec > 0 && x.date < r.date).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5);
+  const pace = r.durSec / r.distKm, avg = prev.length ? prev.reduce((a, x) => a + x.durSec / x.distKm, 0) / prev.length : null;
+  const faster = avg && avg - pace >= 1 ? `${Math.round(avg - pace)} s/km faster than your last ${prev.length} ${esc(r.type.toLowerCase())} run${prev.length === 1 ? '' : 's'}` : '';
+  const race = [...S.races].filter(x => x.date >= today && !x.resultSec).sort((a, b) => (a.date < b.date ? -1 : 1))[0];
+  const runLine = `<svg class="runline" viewBox="0 0 120 20" aria-hidden="true"><polyline points="2,14 30,6 52,15 78,8 118,4" fill="none" stroke="var(--run)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   return `<div class="run-theme">
   <header class="top"><button class="back" data-act="back" data-h="#/">‹</button><h1>Run</h1></header>
-  <div class="ack" data-kind="${v.kind}"><div class="big">${v.title}</div><div class="line">${fmtShort(r.date)} · ${name}${r.location ? ` · ${esc(r.location)}` : ''}</div></div>
-  <div class="stats"><div><b>${+r.distKm.toFixed(2)} km</b><span>distance</span></div><div><b>${fmtDur(r.durSec)}</b><span>time</span></div><div><b>${fmtPace(r.durSec, r.distKm).replace('/km', '')}</b><span>min/km</span></div></div>
-  ${extra ? `<section class="card"><p class="muted small" style="margin:0">${extra}</p></section>` : ''}
+  <div class="runhero">${runLine}
+    <div class="km">${+r.distKm.toFixed(2)}<span>km</span></div>
+    <div class="ack" data-kind="${v.kind}"><div class="big">${v.title}</div><div class="line">${fmtShort(r.date)} · ${name}${r.location ? ` · ${esc(r.location)}` : ''}</div></div>
+  </div>
+  <div class="stats two"><div><b>${fmtDur(r.durSec)}</b><span>time</span></div><div><b>${fmtPace(r.durSec, r.distKm).replace('/km', '')}</b><span>min/km</span></div></div>
+  ${faster ? `<div class="faster">${faster}</div>` : ''}
+  <section class="card weekrun"><div class="wkhead"><b>${+wkKm.toFixed(1)} km</b><span>this week</span><span class="mon">${monName} ${+monKm.toFixed(1)} km</span></div><div class="daybars">${bars}</div></section>
+  ${race ? `<div class="card race"><div class="big">${daysBetween(today, race.date)}</div><div><b>days to ${esc(race.name)}</b><span class="muted">${fmtDate(race.date)} · ${race.distKm} km</span></div></div>` : ''}
+  ${extra ? `<p class="muted small center" style="margin:4px 0 0">${extra}</p>` : ''}
   <div class="actions"><button class="btn primary wide" data-act="runDone">Done</button></div></div>`;
 };
 

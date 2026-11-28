@@ -64,7 +64,7 @@ After saving a **new** run, a blue summary shows the distance as the big number 
 - **Your longest run this month.** — farther than every other run this month (treadmill counts; the first run of a month does not count).
 - **Every step matters.** — any other run.
 Editing an existing run returns to History as before.
-Races: name, date, distance, target time, linked result → countdown on home screen.
+Races: name, date, distance, target time, linked result → countdown on the run summary (not on Home).
 
 ## After Finish
 Right after Finish, a short positive line sits above the muscle map, with "N exercises · N sets · N min" under it. It is chosen from the session, always positive:
@@ -169,7 +169,7 @@ Design option A ("Poster"), Android system font, same colours as the rest of the
 - **Logo** (large, centred) with LIFT RUN JOURNEY underneath — the most prominent element.
 - **Daily line** second: thin type, centred, with the author in small green capitals. Sundays always show "No human is limited. — Eliud Kipchoge".
 - Greeting by time of day and a last-30-days line (sessions and km).
-- Resume card (session in progress) and next race countdown when they apply.
+- Resume card when a session is in progress. No race countdown on Home (kept clean); the countdown shows on the run summary and in More → Races.
 - **Lift** ("Start a session") / **Run** ("Log a finished run"), This week (sessions, working sets, km), and **Recent**: at most 5 rows, date on the left, one short line each ("6 exercises · 14 sets" / "4 km · 7:30/km"), location as a coloured dot, "See all" → History.
 - Tone: positive. No warnings or negative messages on the home screen.
 

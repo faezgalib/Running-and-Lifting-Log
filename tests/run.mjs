@@ -431,6 +431,10 @@ async function browserTests() {
     check('run summary: distance as the big number, then time and pace, in blue', /^4\s*km$/.test((await p.locator('.runhero .km').innerText()).trim()) && /30:00[\s\S]*7:30/.test(await p.locator('.stats').innerText()) && await p.evaluate(() => getComputedStyle(document.querySelector('[data-act=runDone]')).backgroundColor) === 'rgb(110, 168, 254)', await p.locator('.runhero .km').innerText());
     check('run summary shows this week by day and the month', await p.locator('.daybars .db').count() === 7 && /this week/.test(await p.locator('.weekrun').innerText()) && /\d+(\.\d)? km/.test(await p.locator('.weekrun .mon').innerText()));
     check('Back from the run summary → Home (not the form)', await back() === '#/');
+    await tab('More'); await p.click('a[href="#/races"]'); await p.waitForSelector('#rcName');
+    await p.fill('#rcName', 'Test 10K'); await p.fill('#rcDate', '2027-06-12'); await p.fill('#rcDist', '10'); await p.click('button[data-act=saveRace]'); await p.waitForTimeout(200);
+    await tab('Home');
+    check('Home stays clean: no race countdown even with a race planned', await p.locator('.card.race').count() === 0 && !/days to/.test(await p.locator('main').innerText()));
     await tab('More'); await p.click('a[href="#/body"]');
     await p.fill('#bwKg', '72'); await p.click('button:has-text("+ Add weight")'); await p.waitForTimeout(200);
     const bwTicks = await yTicks('svg.chart');

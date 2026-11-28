@@ -15,7 +15,7 @@ const S = { exercises: [], sessions: [], runs: [], races: [], bodyweight: [], me
 let draft = null;          // plan being built
 let ui = { paceView: 'outdoor', histFilter: 'all', progEx: null, progMetric: 'top', openWhy: {}, hevy: null, picker: null };
 // Shown in More. Major.minor: big redesigns bump the major (v3.0), everything else the minor (v2.1, v2.2…).
-const APP_VERSION = 'v2.14';
+const APP_VERSION = 'v2.15';
 let swReg = null; // service worker registration, used by More → Check for updates
 const LOCS = ['Home', 'Gym', 'Offshore'];
 const SLEEP = [[4, '≤4'], [5, '5'], [6, '6'], [7, '7'], [8, '8+']];
@@ -220,7 +220,6 @@ function nav(tab) {
 // ---------- HOME ----------
 routes[''] = function home() {
   const act = activeSession();
-  const nextRace = S.races.filter(r => r.date >= today()).sort((a, b) => (a.date < b.date ? -1 : 1))[0];
   const wk = weekKey(nowIso());
   const wkSess = doneSessions().filter(s => weekKey(s.start) === wk);
   const wkRuns = S.runs.filter(r => weekKey(r.date) === wk);
@@ -241,7 +240,6 @@ routes[''] = function home() {
     <div class="greet">${greeting()} · ${esc(momentum())}</div>
   </section>
   ${act ? `<a class="card resume" href="#/workout/${act.id}"><b>Session in progress</b><span>${locBadge(act.location)} started ${fmtTime(act.start)} · ${act.entries.length} exercises</span><span class="go">Resume →</span></a>` : ''}
-  ${nextRace ? `<div class="card race run-theme"><div class="big">${daysBetween(today(), nextRace.date)}</div><div><b>days to ${esc(nextRace.name)}</b><span class="muted">${fmtDate(nextRace.date)} · ${nextRace.distKm} km${nextRace.targetSec ? ` · target ${fmtDur(nextRace.targetSec)}` : ''}</span></div></div>` : ''}
   <div class="cta">
     <button class="btn primary pill two" data-act="newPlan"><span class="t">Lift</span><span class="s">Start a session</span></button>
     <button class="btn pill outline two run" data-act="goto" data-h="#/run/new"><span class="t">Run</span><span class="s">Log a finished run</span></button>
